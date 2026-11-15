@@ -30,7 +30,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);fo
 .wrap{max-width:1060px;margin:0 auto;padding-block:10px 16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 body.wide .wrap{max-width:1240px;padding-block:8px 16px}
 body.wide #app{padding:12px}
-body.wide .topbar{margin-bottom:8px;padding-bottom:6px}
+body.wide .topbar{display:none}                 /* 장면 학습 중에는 위 막대를 숨겨 사진을 최대한 크게 */
+body.wide .wrap{padding-block:6px}
 .topbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:12px}
 .topbar b{font-weight:700;letter-spacing:.02em}
 .chip{font-family:var(--f-mono);font-size:14px;letter-spacing:.04em;border:1px solid var(--line);border-radius:999px;padding:2px 10px;color:var(--muted)}
@@ -85,7 +86,7 @@ ul.rules{margin:0 0 12px;padding-left:20px;display:grid;gap:4px}
 .slot.on{border-color:var(--accent);background:var(--bubble-me)}
 .result{min-height:28px;font-weight:700}
 /* 장면 사진: 잘리지 않게 전체를 보여 줌 */
-.scene{display:block;width:100%;height:auto;max-height:calc(100vh - 142px);object-fit:contain;margin:0 auto;border-radius:6px}
+.scene{display:block;width:100%;height:auto;max-height:calc(100vh - 90px);object-fit:contain;margin:0 auto;border-radius:6px}
 .timer{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:16px;color:var(--muted)}
 /* 공동 회상 */
 .recall-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:10px}
@@ -178,7 +179,8 @@ const CFG = {
   STRICT_INPUT: false,                   // false(현재): 목록에 없는 단어도 경고 없이 받고 'self_unknown'으로 기록 → 나중에 후하게 손 채점
                                          //   (경고가 있으면 상대 답이 '프로그램 검사를 통과한 답'처럼 보여 전염이 상대 신뢰와 섞임)
                                          // true: "장면에 없던 물건" 경고 후 다시 입력. 띄어쓰기·중복 경고는 설정과 관계없이 항상 켜짐
-  HUMAN_NAME: "공과대학 jwlee22",           // 사람 상대가 게임 화면에서 쓰는 이름 (모든 세션 동일)
+  HUMAN_NAME: "",                        // 사람 상대 이름. 비워 두면 참가자마다 무작위(단과대학 + 아이디, 예: 이과대학 hjkim07). 고정하려면 "공과대학 jwlee22"처럼 입력
+  ENTRY_CODES: ["1117"],                 // ★ 입장 코드 목록 (대소문자·띄어쓰기 무시, 여러 개면 아무거나 통과). [] = 입장 코드 없이 시작. ?demo=1·?cond= 점검 때는 묻지 않음
   PARTNER_LABEL: "다른 참가자",            // 규칙·안내·질문에서 사람 상대를 부르는 말 (공모자 없음: 실험자가 "다른 강의실/송도에서 동시 접속"이라고 안내)
   DEMO: { STUDY_SEC: 10, DISTRACT_SEC: 10, RECALL_SEC: 180 }
 };
@@ -208,62 +210,66 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
      - recogStudied 6개 = 재인에 나오는 실제 물건. 상대는 절대 말하지 않음
      - 거짓 항목 = 두 묶음(X, Y). 참가자마다 상대가 말하는 묶음을 바꿈(역균형) → 나머지 묶음이 '아무도 말하지 않은 거짓'
      - 참가자가 상대 묶음의 거짓 항목을 먼저 말하면 backupLure로 교체
-   거짓 항목(lureGroups) = 팀 사전 조사 물건 6개를 알려 준 순서대로 1·4·5번(X) / 2·3·6번(Y)으로 나눔 (언급 순위 균형)
-     ★ 표시한 두 개는 사진에 실제로 있는 물건과 겹쳐서 임시로 바꾼 것. backupLure(참가자가 먼저 말했을 때 대체)는 사전 조사 밖 임시안
+   거짓 항목(lureGroups) = 팀이 정한 A묶음(X) / B묶음(Y) (2026-11-15 확정안). backupLure = 참가자가 먼저 말했을 때 대체 (임시안)
      (장면 사진에 없는 물건이어야 하고, 아래 별칭과 겹치면 안 됨 — 겹치면 콘솔에 경고가 뜸)
-   items: { 정답: [허용 표기...] } — 채점은 후하게: 같은 물건을 부를 만한 말을 넓게 넣어 둠
+   items: { 정답: [허용 표기...] } — 채점은 후하게: 같은 물건을 부를 만한 말을 넓게 넣어 둠. 장면당 20개
+   easy 5 + hard 6 + recogStudied 6 = 17개가 대본·재인에 쓰이고, 나머지 3개는 참가자만 말할 수 있는 물건
    ========================================================= */
 const SCENE_DEF = {
   K: { name: "주방", image: "img/kitchen.jpg",
     items: {
-      "숟가락":["숫가락","수저","스푼","숟갈","티스푼"], "국자":[], "집게":["요리집게","고기집게","주방집게","텅스","통스"],
-      "주방세제":["세제","퐁퐁","식기세제","세제통"], "싱크대":["싱크","개수대","수도꼭지","수전","설거지통"],
-      "휘핑기":["거품기","휘퍼","휘스크","계란거품기"], "뒤집개":["뒤집게","스패츌라","스패출라","스파츌라","스패튤라","터너"],
-      "프라이팬":["후라이팬","프라이펜","후라이펜","팬","프라이판"], "전자레인지":["전자렌지","전자랜지","레인지","렌지"],
-      "밥솥":["전기밥솥","압력밥솥","쿠쿠","밥통"], "에어프라이기":["에어프라이어","에어프라이","오븐","토스터","토스터기","오븐토스터","미니오븐","전기오븐"],
-      "그릇":["접시","앞접시","식기"], "가위":["주방가위"], "주걱":["밥주걱"], "고무장갑":["장갑","위생장갑"],
-      "행주":["수세미","스펀지","걸레","행주천"], "물통":["보온병","텀블러","주전자","보온주전자","포트","물병","피처"],
-      "정수기":["냉온수기","커피머신","커피메이커"], "식탁":["테이블","탁자","의자","스툴","협탁","밥상"], "소금":["소금통","맛소금"]
+      "숟가락":["숫가락","수저","스푼","숟갈","티스푼"], "프라이팬":["후라이팬","프라이펜","후라이펜","팬","펜","프라이판"],
+      "믹서기":["믹서","블렌더","블랜더","미니믹서"], "접시":["그릇","앞접시","식기","식기건조대","건조대","접시꽂이"], "가위":["주방가위"], "국자":[],
+      "뒤집개":["뒤집게","스패츌라","스패출라","스파츌라","스패튤라","터너"], "주걱":["밥주걱"],
+      "전기밥솥":["밥솥","압력밥솥","쿠쿠","밥통"], "에어프라이어":["에어프라이기","에어프라이","오븐","토스터","토스터기","오븐토스터","미니오븐","전기오븐"],
+      "집게":["요리집게","고기집게","주방집게","텅스","통스","짚게","짚개","집개"], "거품기":["휘핑기","휘퍼","휘스크","계란거품기"],
+      "고무장갑":["장갑","위생장갑"], "물병":["물통","보온병","텀블러","주전자","보온주전자","포트","피처","물주전자","유리병"], "소금":["소금통","맛소금"],
+      "주방세제":["세제","퐁퐁","식기세제","세제통"], "식탁":["테이블","탁자","스툴","협탁","밥상"],
+      "싱크대":["싱크","개수대","수도꼭지","수전","설거지통"], "행주":["수세미","스펀지","걸레","행주천"], "정수기":["냉온수기","커피머신","커피메이커"],
+      "인덕션":["가스레인지","가스렌지","전기레인지","전기렌지","하이라이트","가스버너","화구"]  // 목록 밖이지만 사진에 있음 → 정답 인정만
     },
-    easy: ["프라이팬","전자레인지","밥솥","싱크대","고무장갑"],
-    hard: ["집게","휘핑기","주걱","행주","물통","식탁"],
-    recogStudied: ["숟가락","국자","가위","소금","그릇","정수기"],
-    lureGroups: { X: ["냄비","냉장고","컵"], Y: ["젓가락","칼","도마"] },
+    easy: ["프라이팬","에어프라이어","전기밥솥","싱크대","고무장갑"],
+    hard: ["집게","거품기","주걱","행주","물병","식탁"],
+    recogStudied: ["숟가락","국자","가위","소금","접시","정수기"],          // 나머지: 뒤집개·주방세제·믹서기
+    lureGroups: { X: ["냄비","냉장고","머그컵"], Y: ["젓가락","식칼","도마"] },
     backupLure: ["앞치마"],
-    lureAlias: { "냄비":[], "냉장고":[], "컵":["물컵","양치컵","유리컵","머그컵","머그","종이컵"], "젓가락":[], "칼":["식칼","부엌칼","과도"], "도마":[], "앞치마":[] }
+    lureAlias: { "냄비":[], "냉장고":[], "머그컵":["머그","컵","물컵","유리컵","종이컵","찻잔","커피잔"], "젓가락":["찹스틱"],
+                 "식칼":["칼","부엌칼","주방칼","과도"], "도마":[], "앞치마":[] }
   },
   L: { name: "거실", image: "img/living.jpg",
     items: {
-      "티비":["tv","티브이","텔레비전","텔레비","테레비","모니터"], "소파":["쇼파","가죽소파"],
-      "화분":["식물","나무","화초","몬스테라","관엽식물"], "공기청정기":["청정기","공청기"],
-      "담요":["이불","무릎담요","블랭킷"], "테이블":["책상","탁자","티테이블","좌탁","식탁","협탁","거실테이블","커피테이블"],
-      "장식장":["진열장","찬장","그릇장","유리장","책장","캐비닛","캐비넷"], "책":["책들","서적","도서"],
-      "안마의자":["마사지의자","마사지체어","안마기"], "흔들의자":["의자","안락의자","나무의자"],
-      "액자":["가족사진","사진","사진액자","사진틀"], "라디오":["전축","레트로라디오"], "곰인형":["인형","테디베어","곰","곰돌이"],
-      "수납장":["tv장","티비장","tv다이","티비다이","거실장","서랍장","선반"], "요가매트":["매트","운동매트"],
-      "스피커":["오디오"], "청소기":["진공청소기"], "창문":["창","창틀","유리창"], "블라인드":["커튼","롤스크린","버티칼"]
+      "TV":["티비","티브이","텔레비전","텔레비","테레비","모니터"], "소파":["쇼파","가죽소파"],
+      "화분":["식물","나무","화초","몬스테라","관엽식물"], "공기청정기":["청정기","공청기"], "담요":["이불","무릎담요","블랭킷"],
+      "시계":["벽시계","탁상시계"], "안마의자":["마사지의자","마사지체어","안마기"], "책":["책들","서적","도서"],
+      "수납장":["tv장","티비장","tv다이","티비다이","거실장","서랍장","선반"],
+      "테이블":["책상","탁자","티테이블","좌탁","식탁","협탁","거실테이블","커피테이블"],
+      "액자":["가족사진","사진","사진액자","사진틀"], "라디오":["전축","레트로라디오"], "요가매트":["매트","운동매트"],
+      "블라인드":["커튼","롤스크린","버티칼"], "스피커":["오디오"], "흔들의자":["의자","안락의자","나무의자"],
+      "인형":["곰인형","테디베어","곰","곰돌이","봉제인형"], "장식장":["진열장","찬장","그릇장","유리장","책장","캐비닛","캐비넷","쇼케이스","유리진열장"],
+      "창문":["창","창틀","유리창"], "청소기":["진공청소기","무선청소기"]
     },
-    easy: ["티비","소파","곰인형","안마의자","청소기"],
+    easy: ["TV","소파","인형","안마의자","청소기"],
     hard: ["공기청정기","라디오","요가매트","스피커","블라인드","담요"],
-    recogStudied: ["화분","책","액자","흔들의자","창문","테이블"],
-    lureGroups: { X: ["조명","쿠션","시계"], Y: ["러그","리모컨","에어컨"] }, // 설문 횟수 X 6+6+3=15 / Y 5+5+5=15. 시계 = '탁자'(사진에 테이블 있음) 대신
-    backupLure: ["달력"],
-    lureAlias: { "조명":["스탠드","전등","스탠드조명","램프","무드등","조명등"], "리모컨":["리모콘"], "에어컨":["에어콘","냉방기"],
-                 "쿠션":["베개"], "러그":["카펫","카페트","깔개","양탄자"], "시계":["벽시계","탁상시계"], "달력":[] }
+    recogStudied: ["화분","책","액자","흔들의자","창문","테이블"],           // 나머지: 장식장·수납장·시계
+    lureGroups: { X: ["스탠드조명","쿠션","달력"], Y: ["리모컨","에어컨","러그"] },
+    backupLure: ["선풍기"],                                                  // 임시안 (달력이 거짓 항목이 되어 새로 정함)
+    lureAlias: { "스탠드조명":["스탠드","조명","장스탠드","전등","램프","무드등","조명등"], "쿠션":["베개","베게","배개","배게"], "달력":[],
+                 "리모컨":["리모콘"], "에어컨":["에어콘","냉방기"], "러그":["카펫","카페트","양탄자"], "선풍기":[] }
   },
   B: { name: "화장실", image: "img/bathroom.jpg",
     items: {
-      "샴푸":["샴푸통"], "린스":["린스통","컨디셔너","트리트먼트"], "락스":["표백제","욕실세제","블리치"],
-      "손세정제":["핸드워시","손비누","물비누","손소독제","세정제"], "슬리퍼":["욕실화","실내화","쓰레빠","샌들","욕실슬리퍼"],
-      "로션":["바디로션","크림"], "물티슈":["티슈"], "수건":["타월","타올"], "치약":[], "물컵":["컵","양치컵","플라스틱컵"],
-      "생리대":["패드"], "욕조":["미니욕조","아기욕조","목욕통","대야"], "칫솔":[], "가글액":["가글","구강청결제","가그린"],
-      "샤워기":["샤워헤드","샤워호스","샤워꼭지"], "클렌징폼":["폼클렌징","세안제","폼클렌저","클렌저","세안폼"],
-      "변기":["양변기","좌변기"], "때타올":["떼타올","때수건","이태리타올","때밀이"], "샤워볼":["샤워타올","바디볼","샤워퍼프","샤워스펀지"],
-      "청소솔":["솔","브러시","브러쉬","수세미","욕실솔","청소브러시"]
+      "샴푸":["샴푸통"], "수건":["타월","타올"], "치약":[], "칫솔":[], "변기":["양변기","좌변기"],
+      "린스":["린스통","컨디셔너","트리트먼트"], "물티슈":["티슈"], "양치컵":["컵","물컵","플라스틱컵"],
+      "가글":["가글액","구강청결제","가그린","리스테린"], "때밀이":["때타올","떼타올","때수건","이태리타올"],
+      "락스":["표백제","욕실세제","블리치","분무기","스프레이","청소세제","세제"], "로션":["바디로션","크림","미스트","스킨"], "생리대":["패드"],
+      "샤워기":["샤워헤드","샤워호스","샤워꼭지"], "샤워볼":["샤워타올","바디볼","샤워퍼프","샤워스펀지"],
+      "손세정제":["핸드워시","손비누","물비누","손소독제","세정제"], "욕조":["미니욕조","아기욕조","목욕통","대야"],
+      "청소솔":["솔","브러시","브러쉬","욕실솔","청소브러시","변기솔","변기브러시","변기청소솔"], "클렌징폼":["폼클렌징","세안제","폼클렌저","클렌저","세안폼","휩폼","휘핑폼"],
+      "슬리퍼":["욕실화","실내화","쓰레빠","샌들","욕실슬리퍼"]
     },
     easy: ["변기","칫솔","치약","수건","샴푸"],
-    hard: ["손세정제","물티슈","로션","청소솔","가글액","샤워볼"],
-    recogStudied: ["린스","락스","슬리퍼","욕조","샤워기","물컵"],
+    hard: ["손세정제","물티슈","로션","청소솔","가글","샤워볼"],
+    recogStudied: ["린스","락스","슬리퍼","욕조","샤워기","양치컵"],         // 나머지: 때밀이·생리대·클렌징폼
     lureGroups: { X: ["비누","거울","세면대"], Y: ["휴지","바디워시","드라이기"] },
     backupLure: ["체중계"],
     lureAlias: { "비누":["세숫비누"], "거울":["손거울"], "세면대":["세면기"], "휴지":["두루마리휴지","두루마리","화장지","롤휴지"],
@@ -271,20 +277,23 @@ const SCENE_DEF = {
   },
   S: { name: "편의점", image: "img/store.jpg",
     items: {
-      "삼각김밥":["김밥","주먹밥","오니기리"], "도시락":[], "메로나":["아이스크림","아이스바","하드"], "우산":["접이식우산","장우산","양산"],
-      "젤리":["구미"], "맥주":["테라","캔맥주","맥주캔"], "소주":["참이슬","소주병"], "샌드위치":[],
-      "사탕":["막대사탕","츄파춥스","롤리팝","캔디"], "바나나우유":["바나나맛우유","우유"], "담배":["담뱃갑","담배갑"], "껌":["자일리톨"],
-      "CCTV":["씨씨티비","감시카메라","카메라","보안카메라"], "핫바":["소시지","소세지","어묵바","어묵","꼬치"],
-      "숟가락":["일회용숟가락","플라스틱숟가락","스푼","수저","일회용스푼"], "건전지":["배터리","밧데리"], "양말":[],
-      "얼음컵":["얼음","아이스컵","컵","플라스틱컵","컵얼음"], "의자":["플라스틱의자","간이의자"], "컵라면":["라면","신라면"]
+      "삼각김밥":["김밥","주먹밥","오니기리"], "핫바":["소시지","소세지","어묵바","어묵","꼬치"], "바나나우유":["바나나맛우유","우유"],
+      "샌드위치":[], "도시락":[], "맥주":["테라","태라","캔맥주","맥주캔"], "소주":["참이슬","소주병"],
+      "아이스크림":["메로나","아이스바","하드","빙과","콘","콘아이스크림","월드콘","브라보콘"], "얼음컵":["얼음","아이스컵","컵","플라스틱컵","컵얼음"],
+      "담배":["담뱃갑","담배갑"], "쓰레기통":["휴지통","분리수거함","재활용통","분리수거통"], "의자":["플라스틱의자","간이의자","스툴","목욕의자","플라스틱스툴"],
+      "우산꽂이":["우산통","우산함","우산거치대","우산꽂이통"], "CCTV":["씨씨티비","감시카메라","카메라","보안카메라"],
+      "젤리":["구미"], "건전지":["배터리","밧데리"], "껌":["자일리톨"], "사탕":["막대사탕","츄파춥스","롤리팝","캔디"],
+      "우산":["접이식우산","장우산","양산"], "양말":[],
+      "숟가락":["일회용숟가락","플라스틱숟가락","스푼","수저","일회용스푼"]  // 목록 밖이지만 사진에 있음 → 정답 인정만
     },
-    easy: ["삼각김밥","컵라면","바나나우유","맥주","소주"],
+    easy: ["삼각김밥","얼음컵","바나나우유","맥주","소주"],
     hard: ["우산","건전지","양말","CCTV","핫바","껌"],
-    recogStudied: ["도시락","메로나","젤리","샌드위치","담배","의자"],
-    lureGroups: { X: ["계산대","음료수","생수"], Y: ["과자","라이터","전자레인지"] }, // ★ 라이터 = '컵라면' 대신 넣은 임시 항목 (컵라면은 사진에 있음)
+    recogStudied: ["도시락","아이스크림","젤리","샌드위치","담배","의자"],    // 나머지: 사탕·쓰레기통·우산꽂이
+    lureGroups: { X: ["포스기","사이다","생수"], Y: ["감자칩","컵라면","전자레인지"] },
     backupLure: ["마스크"],
-    lureAlias: { "계산대":["포스기","카운터"], "음료수":["음료","캔음료","탄산음료","콜라","사이다","주스"], "생수":["물","물병","생수병","삼다수"],
-                 "과자":["스낵","과자봉지"], "라이터":[], "전자레인지":["전자렌지","레인지","렌지"], "마스크":[] }
+    lureAlias: { "포스기":["계산대","카운터","포스","계산기"], "사이다":["칠성사이다","스프라이트"], "생수":["물","물병","생수병","삼다수"],
+                 "감자칩":["포카칩","프링글스","포테이토칩","감자과자"], "컵라면":["라면","신라면","컵누들"],
+                 "전자레인지":["전자렌지","레인지","렌지"], "마스크":[] }
   }
 };
 // 별칭 표 만들기 + 겹침 점검 (겹치면 콘솔 경고)
@@ -334,7 +343,7 @@ async function getCondition(){
 const PERSON = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4.2"/><path d="M3.8 21.5c0-4.6 3.7-8.2 8.2-8.2s8.2 3.6 8.2 8.2z"/></svg>`;
 const ROBOT = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="3" r="1.6"/><rect x="11.2" y="3.5" width="1.6" height="3.5"/><rect x="3.5" y="7" width="17" height="12.5" rx="3.5"/><rect x="1" y="11" width="2" height="5" rx="1"/><rect x="21" y="11" width="2" height="5" rx="1"/><circle cx="8.8" cy="12.6" r="1.7" fill="var(--panel)"/><circle cx="15.2" cy="12.6" r="1.7" fill="var(--panel)"/><rect x="8.5" y="16" width="7" height="1.3" rx=".6" fill="var(--panel)"/></svg>`;
 const isHu = R => R.partner === "human";
-const gameName = R => isHu(R) ? CFG.HUMAN_NAME : "AI 플레이어";       // 게임 화면 안에서만 쓰는 이름
+const gameName = R => isHu(R) ? S.humanName : "AI 플레이어";       // 게임 화면 안에서만 쓰는 이름
 const anonName = R => isHu(R) ? CFG.PARTNER_LABEL : "AI 플레이어";    // 규칙·안내·질문에서 쓰는 이름
 const avatar = (R, big) => `<span class="av ${isHu(R) ? "hu" : "ai"}${big ? " big" : ""}">${isHu(R) ? PERSON : ROBOT}</span>`;
 const myAvatar = big => `<span class="av me${big ? " big" : ""}">${PERSON}</span>`;
@@ -345,7 +354,7 @@ const ruleText = () => S.context === "compete"
 /* =========================================================
    상태
    ========================================================= */
-const S = { pid:"", code:"", demo:DEMO, cond:null, assign:"", context:null, order:null, lureSet:null, sceneOrder:[], myName:"",
+const S = { pid:"", code:"", entry:"", humanName:"", demo:DEMO, cond:null, assign:"", context:null, order:null, lureSet:null, sceneOrder:[], myName:"",
             startISO:"", tStart:0, rounds:[], source:[], trust:{}, post:{}, upload:null, csv:"" };
 const T = k => S.demo ? CFG.DEMO[k] : CFG[k];
 const jsPsych = initJsPsych({ display_element: "app" });
@@ -368,6 +377,13 @@ function makeId(){
   const code = Array.from({ length: 4 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[rand(0, 31)]).join("");
   return { pid: `${String(d.getFullYear()).slice(2)}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}_${code}`, code };
 }
+function makeHumanName(){
+  if (CFG.HUMAN_NAME) return CFG.HUMAN_NAME;
+  const col = pick(COLLEGES.filter(c => c !== "기타"));
+  const sur = pick(["kim","lee","park","choi","jung","kang","cho","yoon","jang","lim","han","shin","seo","kwon","hwang","song"]);
+  const ini = () => pick([..."bdhjkmnsyw"]);
+  return `${col} ${ini()}${ini()}${sur}${String(rand(0, 99)).padStart(2, "0")}`;
+}
 function preload(src){
   return new Promise((ok, bad) => { const im = new Image(); im.onload = () => (im.decode ? im.decode().catch(() => {}) : Promise.resolve()).then(ok); im.onerror = () => bad(src); im.src = src; });
 }
@@ -376,7 +392,7 @@ REG.prepare = async (el, d, done) => {
   if (!DEMO) addEventListener("beforeunload", guard);
   el.innerHTML = `<h2>게임을 준비하는 중…</h2><p class="muted"><span class="spin"></span><span id="pg">잠시만 기다려 주세요.</span></p>`;
   const id = makeId();
-  Object.assign(S, { pid: (DEMO ? "DEMO_" : "") + id.pid, code: id.code, startISO: new Date().toISOString(), tStart: Date.now() });
+  Object.assign(S, { pid: (DEMO ? "DEMO_" : "") + id.pid, code: id.code, startISO: new Date().toISOString(), tStart: Date.now(), humanName: makeHumanName() });
   let n = 0; const pg = el.querySelector("#pg");
   const imgs = Object.values(SCENES).map(sc => preload(sc.image).then(() => { pg.textContent = `장면 불러오는 중 ${++n}/4`; }));
   const [cond, imgRes] = await Promise.all([getCondition(), Promise.allSettled(imgs)]);
@@ -794,7 +810,7 @@ function roundSumm(R){
 }
 function buildRow(){
   const row = { participant_id: S.pid, completion_code: S.code, session_start: S.startISO, duration_min: +((Date.now() - S.tStart) / 60000).toFixed(1),
-                demo: S.demo ? 1 : 0, condition: S.cond, assign_source: S.assign, context: S.context, partner_order: S.order,
+                demo: S.demo ? 1 : 0, entry_code: S.entry, human_name: S.humanName, condition: S.cond, assign_source: S.assign, context: S.context, partner_order: S.order,
                 lure_set: S.lureSet, scene_order: S.sceneOrder.map(k => SCENES[k].name).join("-"), n_scenes: S.rounds.length, scenes_per_round: CFG.SCENES_PER_BLOCK,
                 strict_input: CFG.STRICT_INPUT ? 1 : 0, screen: `${screen.width}x${screen.height}`, viewport: `${innerWidth}x${innerHeight}` };
   for (const p of ["human", "ai"]){
@@ -880,16 +896,29 @@ REG.finish = async (el, d, done) => {
    타임라인
    ========================================================= */
 const timeline = [];
-timeline.push({ // 커버스토리 (함께 동의서·안내문을 읽은 뒤 시작)
-  type: jsPsychHtmlButtonResponse,
-  stimulus: () => `<h2>기억 게임 연구</h2>
+/* 커버스토리 + 입장 코드. 코드가 맞아야 '시작'이 눌림 → 그 뒤에 조건을 받으므로, 집에서 미리 열어도 조건 칸이 쓰이지 않음 */
+const NEED_CODE = CFG.ENTRY_CODES.length > 0 && !DEMO && FORCED === null;
+REG.cover = (el, d, done) => {
+  setChip("안내");
+  el.innerHTML = `<h2>기억 게임 연구</h2>
     <p>이 연구는 새로 개발 중인 기억 게임을 시험하는 연구입니다.<br>게임은 두 라운드로, 한 라운드는 ${CFG.PARTNER_LABEL}와, 다른 한 라운드는 AI 플레이어와 진행합니다.</p>
     <p>${CFG.SCENES_PER_BLOCK > 1 ? `라운드마다 연속해서 장면 ${CFG.SCENES_PER_BLOCK}개를 보고, ` : "라운드마다 장면을 보고, "}각 장면에 있는 물건을 안내에 따라 외워 주시기 바랍니다.</p>
     <p class="muted">실험자의 안내에 따라 시작을 눌러 주세요.<br>게임이 끝날 때까지 이 창을 닫거나 새로고침하지 마세요.</p>
-    ${DEMO ? '<p class="muted">[데모 모드 — 시간 단축 · 전송 안 함]</p>' : ""}`,
-  choices: ["시작"], data: { phase: "cover_story" },
-  on_load: () => setChip("안내")
-});
+    ${NEED_CODE ? `<div class="form"><label for="ec">입장 코드 (실험자가 알려 드려요)<input id="ec" autocomplete="off" maxlength="20" style="max-width:220px"></label></div><div class="warn" id="warn" role="status"></div>` : ""}
+    ${DEMO ? '<p class="muted">[데모 모드 — 시간 단축 · 전송 안 함 · 입장 코드 없음]</p>' : FORCED !== null ? `<p class="muted">[점검 모드 — 조건 ${FORCED} 고정 · 입장 코드 없음]</p>` : ""}
+    <button class="btn cbtn" id="go" type="button">시작</button>`;
+  const ec = el.querySelector("#ec"), go = () => {
+    if (NEED_CODE){
+      const v = norm(ec.value);
+      if (!CFG.ENTRY_CODES.map(norm).includes(v)){ el.querySelector("#warn").textContent = v ? "입장 코드가 맞지 않아요. 실험자가 알려 준 코드를 다시 확인해 주세요." : "입장 코드를 입력해 주세요."; ec.focus(); return; }
+      S.entry = ec.value.trim();
+    }
+    done({ phase: "cover_story" });
+  };
+  el.querySelector("#go").onclick = go;
+  if (ec){ ec.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing){ e.preventDefault(); go(); } }); ec.focus(); }
+};
+timeline.push(fn("cover"));
 timeline.push(fn("prepare"));
 timeline.push(fn("register"));
 
