@@ -190,10 +190,12 @@ const COLLEGES = ["문과대학","상경대학","경영대학","이과대학","�
 
 /* 주소 뒤에 붙이는 옵션 (실험자용)
    ?demo=1   데모: 시간 단축·건너뛰기 버튼·전송 안 함·배정 카운터를 쓰지 않음
-   ?cond=7   조건 강제 지정(0~31). 파일럿·점검용 — 배정 카운터를 쓰지 않고, 자료에 assign_source=forced로 남음 */
+   ?cond=7   조건 강제 지정(0~31). 실험자 점검용 — 배정 카운터를 쓰지 않고, 자료에 assign_source=forced로 남음 (화면에 점검 표시)
+   ?pilot=3  예비실험용 — 실제와 같은 시간·전송, 조건 3 고정, 화면 표시·입장 코드 없음, 자료에 assign_source=pilot */
 const Q = new URLSearchParams(location.search);
 const DEMO = Q.get("demo") === "1";
 const FORCED = Q.has("cond") && /^\d+$/.test(Q.get("cond")) ? Number(Q.get("cond")) % N_CONDITIONS : null;
+const PILOT = FORCED === null && Q.has("pilot") && /^\d+$/.test(Q.get("pilot")) ? Number(Q.get("pilot")) % N_CONDITIONS : null;
 
 /* ---------- 공통 도구 ---------- */
 const norm = s => String(s).replace(/\s+/g, "").toLowerCase();
@@ -324,6 +326,7 @@ function decode(c){
 }
 async function getCondition(){
   if (FORCED !== null) return { c: FORCED, src: "forced" };
+  if (PILOT !== null) return { c: PILOT, src: "pilot" };
   if (DEMO || !CFG.DATAPIPE_ID) return { c: rand(0, N_CONDITIONS - 1), src: DEMO ? "demo_random" : "random_no_datapipe" };
   for (let k = 0; k < 2; k++){
     try {
@@ -897,7 +900,7 @@ REG.finish = async (el, d, done) => {
    ========================================================= */
 const timeline = [];
 /* 커버스토리 + 입장 코드. 코드가 맞아야 '시작'이 눌림 → 그 뒤에 조건을 받으므로, 집에서 미리 열어도 조건 칸이 쓰이지 않음 */
-const NEED_CODE = CFG.ENTRY_CODES.length > 0 && !DEMO && FORCED === null;
+const NEED_CODE = CFG.ENTRY_CODES.length > 0 && !DEMO && FORCED === null && PILOT === null;
 REG.cover = (el, d, done) => {
   setChip("안내");
   el.innerHTML = `<h2>기억 게임 연구</h2>
