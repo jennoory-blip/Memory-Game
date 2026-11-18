@@ -143,6 +143,17 @@ textarea.ans{width:100%;min-height:72px;box-sizing:border-box;resize:vertical}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:rot .8s linear infinite;vertical-align:-2px;margin-right:6px}
 @keyframes rot{to{transform:rotate(360deg)}}
 textarea.csv{width:100%;min-height:110px;font-family:var(--f-mono);font-size:14px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px;box-sizing:border-box}
+/* 게임 모드 화면 (협력전/경쟁전): 두 모드 모두 같은 크기·색·배치 — 바뀌는 건 이름·그림·규칙 문장뿐 */
+.mode .mlabel{font-size:20px;color:var(--muted);letter-spacing:.08em;margin-bottom:6px}
+.mode .mname{font-size:54px;font-weight:700;letter-spacing:.06em;line-height:1.2}
+.mode .micon{display:block;width:76px;height:76px;margin:14px auto 22px;color:var(--accent)}
+.mode .mrule{font-size:23px;margin:0 auto 4px;max-width:30em}
+.ricon{display:inline-block;width:1.1em;height:1.1em;vertical-align:-.18em;margin-right:6px;color:var(--accent)}
+.rule.small .ricon{width:1em;height:1em}
+.memo{border:1.5px solid var(--line);border-radius:8px;padding:10px 18px;margin:10px 0;font-size:16px;line-height:1.6}
+.memo b.h{display:block;font-size:17px;margin-bottom:2px}
+.pts{font-family:var(--f-mono);font-size:15px;color:var(--muted);text-align:center;margin:0 0 8px}
+.pts.hi{color:var(--accent);font-weight:500}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -162,7 +173,9 @@ const CFG = {
   DATAPIPE_ID: "xKAx0QndYl4g",                       // ★ pipe.jspsych.org에서 받은 실험 ID(12자)를 넣으면 자동 배정·자동 전송이 켜짐
   SCENES_PER_BLOCK: 2,                   // 라운드(상대 한 명)당 장면 수. 2 = 장면 4개 모두 / 1 = 장면 2개만 씀
   NEXT_SCENE_MS: 1500,
-  SOURCE_PER_SCENE: { partner: 4, me: 3, none: 3 }, // 출처 검사 장면당 문항: 상대가 말한 정답 / 내가 말한 정답 / 아무도 안 말한 실제 물건 (4장면 → 40문항)                   // 한 라운드 안에서 장면과 장면 사이 '다음 장면' 화면
+  MODE_MIN_MS: 2000,                     // 게임 모드(협력전/경쟁전) 화면: 이 시간이 지나야 '다음'이 눌림 (두 모드 동일)
+  HARD_P: 0.25,                          // 계산 문제 중 어려운 문제(배점 3점)가 나올 확률 — 쉬운 문제는 1점
+  SOURCE_PER_SCENE: { partner: 4, me: 3, none: 3 }, // 출처 검사 장면당 문항: 상대가 말한 정답 / 내가 말한 정답 / 아무도 안 말한 실제 물건 (4장면 → 40문항)
   STUDY_SEC: 60,                         // 장면 학습 시간
   DISTRACT_SEC: 120,                     // 방해 과제(산수) — Park 실험 2 기준 2분
   RECALL_SEC: 180,                       // 공동 회상 카운트다운 (16차례)
@@ -212,7 +225,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
      - recogStudied 6개 = 재인에 나오는 실제 물건. 상대는 절대 말하지 않음
      - 거짓 항목 = 두 묶음(X, Y). 참가자마다 상대가 말하는 묶음을 바꿈(역균형) → 나머지 묶음이 '아무도 말하지 않은 거짓'
      - 참가자가 상대 묶음의 거짓 항목을 먼저 말하면 backupLure로 교체
-   거짓 항목(lureGroups) = 팀이 정한 A묶음(X) / B묶음(Y) (2026-11-15 확정안). backupLure = 참가자가 먼저 말했을 때 대체 (임시안)
+   거짓 항목(lureGroups) = 채점 기준 문서의 A묶음(X) / B묶음(Y) (2026-11-17 파일럿 뒤 교체안). backupLure = 참가자가 먼저 말했을 때 대체 (임시안)
      (장면 사진에 없는 물건이어야 하고, 아래 별칭과 겹치면 안 됨 — 겹치면 콘솔에 경고가 뜸)
    items: { 정답: [허용 표기...] } — 채점은 후하게: 같은 물건을 부를 만한 말을 넓게 넣어 둠. 장면당 20개
    easy 5 + hard 6 + recogStudied 6 = 17개가 대본·재인에 쓰이고, 나머지 3개는 참가자만 말할 수 있는 물건
@@ -221,49 +234,49 @@ const SCENE_DEF = {
   K: { name: "주방", image: "img/kitchen.jpg",
     items: {
       "숟가락":["숫가락","수저","스푼","숟갈","티스푼"], "프라이팬":["후라이팬","프라이펜","후라이펜","팬","펜","프라이판"],
-      "믹서기":["믹서","블렌더","블랜더","미니믹서"], "접시":["그릇","앞접시","식기","식기건조대","건조대","접시꽂이"], "가위":["주방가위"], "국자":[],
+      "믹서기":["믹서","블렌더","블랜더","미니믹서","핸드블렌더"], "접시":["그릇","앞접시","식기","식기건조대","건조대","접시꽂이"], "가위":["주방가위"], "국자":[],
       "뒤집개":["뒤집게","스패츌라","스패출라","스파츌라","스패튤라","터너"], "주걱":["밥주걱"],
       "전기밥솥":["밥솥","압력밥솥","쿠쿠","밥통"], "에어프라이어":["에어프라이기","에어프라이","오븐","토스터","토스터기","오븐토스터","미니오븐","전기오븐"],
       "집게":["요리집게","고기집게","주방집게","텅스","통스","짚게","짚개","집개"], "거품기":["휘핑기","휘퍼","휘스크","계란거품기"],
       "고무장갑":["장갑","위생장갑"], "물병":["물통","보온병","텀블러","주전자","보온주전자","포트","피처","물주전자","유리병"], "소금":["소금통","맛소금"],
       "주방세제":["세제","퐁퐁","식기세제","세제통"], "식탁":["테이블","탁자","스툴","협탁","밥상"],
-      "싱크대":["싱크","개수대","수도꼭지","수전","설거지통"], "행주":["수세미","스펀지","걸레","행주천"], "정수기":["냉온수기","커피머신","커피메이커"],
+      "싱크대":["싱크","개수대","수도꼭지","수전","설거지통"], "행주":["스펀지","걸레","행주천"], "정수기":["냉온수기","커피머신","커피메이커"],
       "인덕션":["가스레인지","가스렌지","전기레인지","전기렌지","하이라이트","가스버너","화구"]  // 목록 밖이지만 사진에 있음 → 정답 인정만
     },
     easy: ["프라이팬","에어프라이어","전기밥솥","싱크대","고무장갑"],
     hard: ["집게","거품기","주걱","행주","물병","식탁"],
     recogStudied: ["숟가락","국자","가위","소금","접시","정수기"],          // 나머지: 뒤집개·주방세제·믹서기
-    lureGroups: { X: ["냄비","냉장고","머그컵"], Y: ["젓가락","식칼","도마"] },
+    lureGroups: { X: ["수세미","냉장고","머그컵"], Y: ["젓가락","식칼","도마"] },
     backupLure: ["앞치마"],
-    lureAlias: { "냄비":[], "냉장고":[], "머그컵":["머그","컵","물컵","유리컵","종이컵","찻잔","커피잔"], "젓가락":["찹스틱"],
+    lureAlias: { "수세미":[], "냉장고":[], "머그컵":["머그","머그잔","컵","물컵","유리컵","종이컵","찻잔","커피잔"], "젓가락":["찹스틱"],
                  "식칼":["칼","부엌칼","주방칼","과도"], "도마":[], "앞치마":[] }
   },
   L: { name: "거실", image: "img/living.jpg",
     items: {
       "TV":["티비","티브이","텔레비전","텔레비","테레비","모니터"], "소파":["쇼파","가죽소파"],
-      "화분":["식물","나무","화초","몬스테라","관엽식물"], "공기청정기":["청정기","공청기"], "담요":["이불","무릎담요","블랭킷"],
-      "시계":["벽시계","탁상시계"], "안마의자":["마사지의자","마사지체어","안마기"], "책":["책들","서적","도서"],
-      "수납장":["tv장","티비장","tv다이","티비다이","거실장","서랍장","선반"],
+      "화분":["식물","나무","화초","몬스테라","관엽식물"], "공기청정기":["청정기","공청기"], "담요":["이불","무릎담요","블랭킷","머플러","스카프","체크담요"],
+      "시계":["벽시계","탁상시계","원형시계"], "안마의자":["마사지의자","마사지체어","안마기"], "책":["책들","서적","도서"],
+      "수납장":["tv장","티비장","tv다이","티비다이","거실장","서랍장","선반","서랍","거치대"],
       "테이블":["책상","탁자","티테이블","좌탁","식탁","협탁","거실테이블","커피테이블"],
       "액자":["가족사진","사진","사진액자","사진틀"], "라디오":["전축","레트로라디오"], "요가매트":["매트","운동매트"],
       "블라인드":["커튼","롤스크린","버티칼"], "스피커":["오디오"], "흔들의자":["의자","안락의자","나무의자"],
-      "인형":["곰인형","테디베어","곰","곰돌이","봉제인형"], "장식장":["진열장","찬장","그릇장","유리장","책장","캐비닛","캐비넷","쇼케이스","유리진열장"],
+      "인형":["곰인형","테디베어","곰","곰돌이","봉제인형","곰돌이인형"], "장식장":["진열장","찬장","그릇장","유리장","책장","캐비닛","캐비넷","쇼케이스","유리진열장","유리장식장"],
       "창문":["창","창틀","유리창"], "청소기":["진공청소기","무선청소기"]
     },
     easy: ["TV","소파","인형","안마의자","청소기"],
     hard: ["공기청정기","라디오","요가매트","스피커","블라인드","담요"],
     recogStudied: ["화분","책","액자","흔들의자","창문","테이블"],           // 나머지: 장식장·수납장·시계
-    lureGroups: { X: ["스탠드조명","쿠션","달력"], Y: ["리모컨","에어컨","러그"] },
-    backupLure: ["선풍기"],                                                  // 임시안 (달력이 거짓 항목이 되어 새로 정함)
-    lureAlias: { "스탠드조명":["스탠드","조명","장스탠드","전등","램프","무드등","조명등"], "쿠션":["베개","베게","배개","배게"], "달력":[],
-                 "리모컨":["리모콘"], "에어컨":["에어콘","냉방기"], "러그":["카펫","카페트","양탄자"], "선풍기":[] }
+    lureGroups: { X: ["스탠드조명","쿠션","멀티탭"], Y: ["리모컨","에어컨","안경"] },
+    backupLure: ["선풍기"],                                                  // 임시안 (11/17 달력은 거짓 항목에서 빠짐 → 팀에서 다시 정할 것)
+    lureAlias: { "스탠드조명":["스탠드","조명","장스탠드","전등","램프","무드등","조명등","스탠드등"], "쿠션":["베개","베게","배개","배게","방석"], "멀티탭":["콘센트","멀티콘센트","전원탭"],
+                 "리모컨":["리모콘"], "에어컨":["에어콘","냉방기"], "안경":[], "선풍기":[] }
   },
   B: { name: "화장실", image: "img/bathroom.jpg",
     items: {
       "샴푸":["샴푸통"], "수건":["타월","타올"], "치약":[], "칫솔":[], "변기":["양변기","좌변기"],
-      "린스":["린스통","컨디셔너","트리트먼트"], "물티슈":["티슈"], "양치컵":["컵","물컵","플라스틱컵"],
+      "린스":["린스통","컨디셔너","트리트먼트"], "물티슈":["티슈","물휴지"], "양치컵":["컵","물컵","플라스틱컵"],
       "가글":["가글액","구강청결제","가그린","리스테린"], "때밀이":["때타올","떼타올","때수건","이태리타올"],
-      "락스":["표백제","욕실세제","블리치","분무기","스프레이","청소세제","세제"], "로션":["바디로션","크림","미스트","스킨"], "생리대":["패드"],
+      "락스":["표백제","욕실세제","블리치","분무기","스프레이","청소세제","세제"], "로션":["바디로션","크림","미스트","스킨"], "생리대":["패드","위생용품","여성용품","여성위생용품"],
       "샤워기":["샤워헤드","샤워호스","샤워꼭지"], "샤워볼":["샤워타올","바디볼","샤워퍼프","샤워스펀지"],
       "손세정제":["핸드워시","손비누","물비누","손소독제","세정제"], "욕조":["미니욕조","아기욕조","목욕통","대야"],
       "청소솔":["솔","브러시","브러쉬","욕실솔","청소브러시","변기솔","변기브러시","변기청소솔"], "클렌징폼":["폼클렌징","세안제","폼클렌저","클렌저","세안폼","휩폼","휘핑폼"],
@@ -272,28 +285,28 @@ const SCENE_DEF = {
     easy: ["변기","칫솔","치약","수건","샴푸"],
     hard: ["손세정제","물티슈","로션","청소솔","가글","샤워볼"],
     recogStudied: ["린스","락스","슬리퍼","욕조","샤워기","양치컵"],         // 나머지: 때밀이·생리대·클렌징폼
-    lureGroups: { X: ["비누","거울","세면대"], Y: ["휴지","바디워시","드라이기"] },
+    lureGroups: { X: ["면도기","거울","세면대"], Y: ["치실","바디워시","배수구"] },
     backupLure: ["체중계"],
-    lureAlias: { "비누":["세숫비누"], "거울":["손거울"], "세면대":["세면기"], "휴지":["두루마리휴지","두루마리","화장지","롤휴지"],
-                 "바디워시":["바디샤워","샤워젤"], "드라이기":["드라이어","헤어드라이기","헤어드라이어"], "체중계":["저울"] }
+    lureAlias: { "면도기":["면도칼","면도날","전기면도기"], "거울":["손거울"], "세면대":["세면기"], "치실":["플로스","치실통"],
+                 "바디워시":["바디샤워","샤워젤"], "배수구":["하수구","배수구멍","배수망"], "체중계":["저울"] }
   },
   S: { name: "편의점", image: "img/store.jpg",
     items: {
       "삼각김밥":["김밥","주먹밥","오니기리"], "핫바":["소시지","소세지","어묵바","어묵","꼬치"], "바나나우유":["바나나맛우유","우유"],
-      "샌드위치":[], "도시락":[], "맥주":["테라","태라","캔맥주","맥주캔"], "소주":["참이슬","소주병"],
+      "샌드위치":[], "도시락":["편의점도시락"], "맥주":["테라","태라","캔맥주","맥주캔"], "소주":["참이슬","소주병"],
       "아이스크림":["메로나","아이스바","하드","빙과","콘","콘아이스크림","월드콘","브라보콘"], "얼음컵":["얼음","아이스컵","컵","플라스틱컵","컵얼음"],
       "담배":["담뱃갑","담배갑"], "쓰레기통":["휴지통","분리수거함","재활용통","분리수거통"], "의자":["플라스틱의자","간이의자","스툴","목욕의자","플라스틱스툴"],
       "우산꽂이":["우산통","우산함","우산거치대","우산꽂이통"], "CCTV":["씨씨티비","감시카메라","카메라","보안카메라"],
-      "젤리":["구미"], "건전지":["배터리","밧데리"], "껌":["자일리톨"], "사탕":["막대사탕","츄파춥스","롤리팝","캔디"],
+      "젤리":["구미","구미베어","하리보","하리보젤리"], "건전지":["배터리","밧데리"], "껌":["자일리톨"], "사탕":["막대사탕","츄파춥스","롤리팝","캔디"],
       "우산":["접이식우산","장우산","양산"], "양말":[],
-      "숟가락":["일회용숟가락","플라스틱숟가락","스푼","수저","일회용스푼"]  // 목록 밖이지만 사진에 있음 → 정답 인정만
+      "숟가락":["일회용숟가락","플라스틱숟가락","스푼","수저","일회용스푼","일회용품"]  // 목록 밖이지만 사진에 있음 → 정답 인정만 (11/17 사진에서 빼기로 함 → 사진이 바뀌면 이 줄 삭제)
     },
     easy: ["삼각김밥","얼음컵","바나나우유","맥주","소주"],
     hard: ["우산","건전지","양말","CCTV","핫바","껌"],
     recogStudied: ["도시락","아이스크림","젤리","샌드위치","담배","의자"],    // 나머지: 사탕·쓰레기통·우산꽂이
-    lureGroups: { X: ["포스기","사이다","생수"], Y: ["감자칩","컵라면","전자레인지"] },
+    lureGroups: { X: ["포스기","라이터","빨대"], Y: ["감자칩","컵라면","전자레인지"] },
     backupLure: ["마스크"],
-    lureAlias: { "포스기":["계산대","카운터","포스","계산기"], "사이다":["칠성사이다","스프라이트"], "생수":["물","물병","생수병","삼다수"],
+    lureAlias: { "포스기":["포스","카드단말기","결제단말기"], "라이터":["가스라이터","일회용라이터"], "빨대":["스트로","스트로우"],
                  "감자칩":["포카칩","프링글스","포테이토칩","감자과자"], "컵라면":["라면","신라면","컵누들"],
                  "전자레인지":["전자렌지","레인지","렌지"], "마스크":[] }
   }
@@ -311,6 +324,39 @@ for (const [k, d] of Object.entries(SCENE_DEF)) {
   Object.entries(d.lureAlias).forEach(([w, al]) => { if (d.items[w]) console.warn(`[${d.name}] 거짓 항목 '${w}'가 실제 물건 목록에 있음`); add(w, al); });
   [...d.easy, ...d.hard, ...d.recogStudied].forEach(w => { if (!d.items[w]) console.warn(`[${d.name}] '${w}'가 물건 목록에 없음`); });
   SCENES[k] = sc;
+}
+
+/* ---------- 사소한 오타 허용: 한글을 자모(초성·중성·종성)로 풀어 1개만 다르면 그 물건으로 인정 ----------
+   채점 기준 문서 규칙: 한 글자 단어, 후보가 둘 이상, 거짓 항목과 가까운 경우는 자동으로 정하지 않고 self_unknown(손 채점)으로 남김 */
+const CHO = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ", JUNG = "ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ";
+const JONG = ["","ㄱ","ㄲ","ㄳ","ㄴ","ㄵ","ㄶ","ㄷ","ㄹ","ㄺ","ㄻ","ㄼ","ㄽ","ㄾ","ㄿ","ㅀ","ㅁ","ㅂ","ㅄ","ㅅ","ㅆ","ㅇ","ㅈ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
+const jamo = s => [...s].flatMap(ch => { const c = ch.charCodeAt(0) - 0xAC00; if (c < 0 || c > 11171) return [ch];
+  return [CHO[Math.floor(c / 588)], JUNG[Math.floor((c % 588) / 28)], ...(c % 28 ? [JONG[c % 28]] : [])]; });
+function editDist(a, b, cap){ // 편집 거리(바꾸기·넣기·빼기 각 1). cap을 넘으면 cap+1을 돌려줌
+  if (Math.abs(a.length - b.length) > cap) return cap + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++){
+    const cur = [i]; let best = i;
+    for (let j = 1; j <= b.length; j++){ cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); best = Math.min(best, cur[j]); }
+    if (best > cap) return cap + 1; prev = cur;
+  }
+  return prev[b.length];
+}
+const syl = s => [...s].length;
+function fuzzyAny(sc, raw){ // 자모 1개 차이로 딱 한 단어(정답·거짓 항목 모두)에만 가까우면 그 단어
+  const n = norm(raw); if (syl(n) < 2) return null;
+  const J = jamo(n), hits = new Set();
+  for (const [a, w] of Object.entries(sc.alias)) if (syl(a) >= 2 && editDist(J, jamo(a), 1) <= 1) hits.add(w);
+  return hits.size === 1 ? [...hits][0] : null;
+}
+const fuzzyMatch = (sc, raw) => { const w = fuzzyAny(sc, raw); return w && sc.items[w] ? w : null; }; // 거짓 항목에 가까우면 자동 인정 안 함
+function nearItems(sc, raw){ // 손 채점으로 남은 입력과 비슷한 물건들 → 상대가 그 물건을 말하지 않게 피함
+  const n = norm(raw), J = jamo(n), out = new Set();
+  for (const [a, w] of Object.entries(sc.alias)){
+    if (syl(a) < 2) continue;
+    if (editDist(J, jamo(a), 2) <= 2 || (syl(n) >= 2 && (n.includes(a) || a.includes(n)))) out.add(w);
+  }
+  return [...out];
 }
 
 /* =========================================================
@@ -350,15 +396,21 @@ const gameName = R => isHu(R) ? S.humanName : "AI 플레이어";       // 게임
 const anonName = R => isHu(R) ? CFG.PARTNER_LABEL : "AI 플레이어";    // 규칙·안내·질문에서 쓰는 이름
 const avatar = (R, big) => `<span class="av ${isHu(R) ? "hu" : "ai"}${big ? " big" : ""}">${isHu(R) ? PERSON : ROBOT}</span>`;
 const myAvatar = big => `<span class="av me${big ? " big" : ""}">${PERSON}</span>`;
-const ruleText = () => S.context === "compete"
-  ? `<b class="rtitle">경쟁</b>둘 중 <b><u>더 많은 물건을 기억해 낸 쪽</u></b>이 보상을 받습니다. 상대가 누구든 지면 보상이 없습니다.`
-  : `<b class="rtitle">협력</b>둘이 <b><u>합쳐서 평균 이상을 기억해 내면</u></b> 보상을 받습니다.`;
+/* 게임 모드 그림: Lucide 아이콘(ISC 라이선스, lucide.dev) handshake / swords — 같은 아이콘 세트라 선 굵기·크기·여백이 같음 */
+const ICON_ATTR = `viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
+const HANDSHAKE = cls => `<svg class="${cls}" ${ICON_ATTR}><path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4"/><path d="m21 3 1 11h-2"/><path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3"/><path d="M3 4h8"/></svg>`;
+const SWORDS = cls => `<svg class="${cls}" ${ICON_ATTR}><path d="m13 19 6-6"/><path d="M14.5 17.5 3.586 6.586A2 2 0 013 5.172V3h2.172a2 2 0 011.414.586L17.5 14.5"/><path d="m14.828 6.172 2.586-2.586A2 2 0 0118.828 3H21v2.172a2 2 0 01-.586 1.414l-2.586 2.586"/><path d="m16 16 4 4"/><path d="m19 21 2-2"/><path d="m5 14 4 4"/><path d="m5 21-2-2"/><path d="M7.5 16.5 4 20"/></svg>`;
+const MODE = {
+  cooperate: { name: "협력전", icon: HANDSHAKE, rule: `상대와 함께 <b><u>평균 이상의 물건</u></b>을 맞히면 보상을 받습니다.` },
+  compete:   { name: "경쟁전", icon: SWORDS,    rule: `상대보다 <b><u>더 많은 물건</u></b>을 맞히면 보상을 받습니다.` }
+};
+const ruleText = () => { const m = MODE[S.context]; return `<b class="rtitle">${m.icon("ricon")}${m.name}</b>${m.rule}`; };
 
 /* =========================================================
    상태
    ========================================================= */
 const S = { pid:"", code:"", entry:"", humanName:"", demo:DEMO, cond:null, assign:"", context:null, order:null, lureSet:null, sceneOrder:[], myName:"",
-            startISO:"", tStart:0, rounds:[], source:[], trust:{}, post:{}, upload:null, csv:"" };
+            startISO:"", tStart:0, rounds:[], source:[], trust:{}, post:{}, consent:null, upload:null, csv:"" };
 const T = k => S.demo ? CFG.DEMO[k] : CFG[k];
 const jsPsych = initJsPsych({ display_element: "app" });
 
@@ -461,28 +513,56 @@ REG.study = (el, d, done) => {
 /* ---------- 방해 과제: 시간 동안 산수 문제 연속 ---------- */
 REG.distract = (el, d, done) => {
   const R = S.blocks[d.block];
+  Object.assign(R.distractor, { score: 0, hard_n: 0, hard_correct: 0 });
   let s = T("DISTRACT_SEC"), fin = false, cur, id;
-  const make = () => {
-    const t = rand(0, 2); let a, b;
-    if (t === 0){ a = rand(12, 89); b = rand(12, 89); return { q: `${a} + ${b}`, ans: a + b }; }
-    if (t === 1){ a = rand(40, 99); b = rand(11, a - 1); return { q: `${a} − ${b}`, ans: a - b }; }
-    a = rand(3, 9); b = rand(11, 19); return { q: `${a} × ${b}`, ans: a * b };
+  const make = () => { // 쉬운 문제(1점) 사이에 어려운 문제(3점)가 가끔 섞임
+    let a, b, c;
+    if (Math.random() < CFG.HARD_P){
+      if (rand(0, 1)){ a = rand(13, 29); b = rand(3, 9); return { q: `${a} × ${b}`, ans: a * b, pts: 3, hard: true }; }
+      a = rand(21, 89); b = rand(12, 59); c = rand(11, Math.min(49, a + b - 11)); return { q: `${a} + ${b} − ${c}`, ans: a + b - c, pts: 3, hard: true };
+    }
+    const t = rand(0, 2);
+    if (t === 0){ a = rand(12, 89); b = rand(12, 89); return { q: `${a} + ${b}`, ans: a + b, pts: 1 }; }
+    if (t === 1){ a = rand(40, 99); b = rand(11, a - 1); return { q: `${a} − ${b}`, ans: a - b, pts: 1 }; }
+    a = rand(3, 9); b = rand(11, 19); return { q: `${a} × ${b}`, ans: a * b, pts: 1 };
   };
   el.innerHTML = `
-    <div class="recall-head"><h2 style="margin:0">계산 문제</h2><span class="timer" id="dt">남은 시간 ${s}초</span></div>
-    <p class="muted">시간이 끝날 때까지 계산 문제를 최대한 많이 풀어 주세요.</p>
+    <div class="recall-head"><h2 style="margin:0">계산 문제</h2><span><span class="timer" id="sc" style="margin-right:16px">점수 0점</span><span class="timer" id="dt">남은 시간 ${s}초</span></span></div>
+    <p class="muted">시간이 끝날 때까지 계산 문제를 최대한 많이 풀어 주세요.<br>문제마다 배점이 다르며, 맞힌 문제의 배점만큼 점수가 쌓입니다. 계산 점수는 개인 기록으로 남습니다.</p>
     <div class="word" id="q"></div>
+    <p class="pts" id="pt"></p>
     <div class="inputrow" style="justify-content:center"><input id="a" inputmode="numeric" autocomplete="off" style="flex:0 1 200px" placeholder="답 입력 후 Enter" aria-label="답"><button class="btn" id="ok" type="button">확인</button></div>
     ${S.demo ? '<button class="btn ghost cbtn" id="skip" type="button">(데모) 건너뛰기</button>' : ""}`;
-  const q = el.querySelector("#q"), a = el.querySelector("#a");
-  const next = () => { cur = make(); q.textContent = cur.q + " = ?"; a.value = ""; a.focus(); };
-  const submit = () => { const v = a.value.trim(); if (!v) return; R.distractor.n++; if (Number(v) === cur.ans) R.distractor.correct++; next(); };
-  const end = () => { if (fin) return; fin = true; clearInterval(id); done({ phase: "distractor", block: d.block + 1, n: R.distractor.n, correct: R.distractor.correct }); };
+  const q = el.querySelector("#q"), a = el.querySelector("#a"), pt = el.querySelector("#pt");
+  const next = () => { cur = make(); q.textContent = cur.q + " = ?"; pt.textContent = `배점 ${cur.pts}점`; pt.className = "pts" + (cur.hard ? " hi" : ""); a.value = ""; a.focus(); };
+  const submit = () => {
+    const v = a.value.trim(); if (!v) return;
+    const D = R.distractor, ok = Number(v) === cur.ans;
+    D.n++; if (cur.hard) D.hard_n++;
+    if (ok){ D.correct++; D.score += cur.pts; if (cur.hard) D.hard_correct++; }
+    el.querySelector("#sc").textContent = `점수 ${D.score}점`; next();
+  };
+  const end = () => { if (fin) return; fin = true; clearInterval(id); const D = R.distractor; done({ phase: "distractor", block: d.block + 1, n: D.n, correct: D.correct, score: D.score }); };
   a.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing){ e.preventDefault(); submit(); } });
   el.querySelector("#ok").onclick = submit;
   if (S.demo) el.querySelector("#skip").onclick = end;
   id = setInterval(() => { s--; const e = el.querySelector("#dt"); if (e) e.textContent = `남은 시간 ${s}초`; if (s <= 0) end(); }, 1000);
   next();
+};
+
+/* ---------- 게임 모드 화면: 라운드마다 시작할 때 (협력전/경쟁전, 두 모드 같은 구성·같은 시간) ---------- */
+REG.mode = (el, d, done) => {
+  const m = MODE[S.context];
+  setChip(`라운드 ${d.block + 1} / 2`);
+  el.innerHTML = `<div class="ctr mode">
+    <div class="mlabel">게임 모드</div>
+    <div class="mname">${m.name}</div>
+    ${m.icon("micon")}
+    <p class="mrule">${m.rule}</p>
+    <button class="btn cbtn" id="ok" type="button" disabled>다음</button></div>`;
+  const b = el.querySelector("#ok");
+  setTimeout(() => { b.disabled = false; b.focus(); }, S.demo ? 300 : CFG.MODE_MIN_MS);
+  b.onclick = () => done({ phase: "mode", block: d.block + 1 });
 };
 
 /* ---------- 매칭 연출: 연결 중(사람 MATCH_MS / AI MATCH_MS_AI) → 완료 표시(MATCH_DONE_MS) ---------- */
@@ -569,17 +649,23 @@ REG.recall = (el, d, done) => {
   };
   const clock = setInterval(() => { left--; $("rt").textContent = `남은 시간 ${Math.max(left, 0)}초`; if (left <= 0) finish("timeout"); }, 1000);
 
-  const unknownSaid = new Set();
+  const unknownSaid = new Set(), avoid = new Set(); // avoid: 손 채점 입력과 비슷해 상대가 말하지 않을 물건
   const submit = () => {
     if (inp.disabled || ended) return;
     const raw = inp.value.trim(); if (!raw) return;
     if (/\s/.test(raw)){ $("warn").textContent = "띄어쓰기 없이 붙여서 입력해 주세요. (예: '전기 포트' → '전기포트')"; R.warnings.push({ raw, kind: "space", t_ms: ms() }); inp.select(); return; }
-    const canon = sc.alias[norm(raw)];
+    let canon = sc.alias[norm(raw)], fz = false, near = [];
+    if (!canon){
+      const any = fuzzyAny(sc, raw);
+      if (any && said.has(any)){ $("warn").textContent = "이미 나온 물건이에요."; R.warnings.push({ raw, kind: "duplicate", t_ms: ms() }); inp.select(); return; } // 이미 나온 단어의 오타
+      if (any && sc.items[any]){ canon = any; fz = true; }
+    }
     let type;
     if (!canon){
       if (CFG.STRICT_INPUT){ $("warn").textContent = "이 장면에 없던 물건이에요. 다른 물건을 입력해 주세요."; R.warnings.push({ raw, kind: "not_in_scene", t_ms: ms() }); inp.select(); return; }
       if (unknownSaid.has(norm(raw))){ $("warn").textContent = "이미 나온 물건이에요."; R.warnings.push({ raw, kind: "duplicate", t_ms: ms() }); inp.select(); return; }
       unknownSaid.add(norm(raw)); type = "self_unknown"; // 손 채점 대상
+      near = nearItems(sc, raw); near.forEach(w => avoid.add(w));
     } else {
       if (said.has(canon)){ $("warn").textContent = "이미 나온 물건이에요."; R.warnings.push({ raw, kind: "duplicate", t_ms: ms() }); inp.select(); return; }
       // 준비된 거짓 항목을 참가자가 먼저 말한 경우: 경고 없이 통과하고, 상대는 대체 후보를 씀
@@ -587,7 +673,7 @@ REG.recall = (el, d, done) => {
       said.add(canon);
     }
     pTurns++; $("warn").textContent = ""; inp.value = "";
-    addMe(raw); log.push({ by: "participant", turn: pTurns, raw, item: canon || "", type, t_ms: ms() });
+    addMe(raw); log.push({ by: "participant", turn: pTurns, raw, item: canon || "", type, t_ms: ms(), ...(fz ? { fuzzy: 1 } : {}), ...(near.length ? { near } : {}) });
     myTurn(false); partnerTurn();
   };
   const pass = () => {
@@ -598,15 +684,16 @@ REG.recall = (el, d, done) => {
   };
 
   // 상대 차례: 내용·순서는 사람/AI 조건 모두 같은 대본, 보이는 방식만 다름
-  const first = list => list.find(w => !said.has(w));
+  const first = list => list.find(w => !said.has(w) && !avoid.has(w));
+  R.lureOrder = shuffle(sc.lureGroups[S.lureSet]); // 3·5·7번 차례에 어떤 거짓 항목이 나올지 장면마다 무작위
   const nextItem = t => {
     if (CFG.LURE_TURNS.includes(t)){
-      const w = first([...sc.lureGroups[S.lureSet], ...sc.backupLure]);
+      const w = first([...R.lureOrder, ...sc.backupLure]);
       if (w) return { item: w, type: "partner_lure" };
     }
     const order = CFG.EASY_TURNS.includes(t) ? [...sc.easy, ...sc.hard] : [...sc.hard, ...sc.easy];
     const rest = Object.keys(sc.items).filter(w => !sc.recogStudied.includes(w));
-    return { item: first(order) || first(rest) || first(Object.keys(sc.items)), type: "partner_studied" };
+    return { item: first(order) || first(rest) || first(Object.keys(sc.items)) || Object.keys(sc.items).find(w => !said.has(w)), type: "partner_studied" };
   };
   const partnerTurn = () => {
     if (ended) return;
@@ -649,29 +736,38 @@ function buildRecog(r){
   R.recall.forEach(m => { if (m.item) by[m.item] = m.type; });
   sc.recogStudied.forEach(w => items.push({ word: w, kind: "studied", mention: by[w] || "unmentioned" }));
   [...sc.lureGroups[S.lureSet], ...sc.backupLure].forEach(w => { if (by[w] === "partner_lure") items.push({ word: w, kind: "lure", lure_type: "partner_lure" }); });
-  sc.lureGroups[S.lureSet === "X" ? "Y" : "X"].forEach(w => items.push({ word: w, kind: "lure", lure_type: by[w] === "self_lure" ? "self_lure" : "unmentioned_lure" }));
+  const nearSelf = new Set(R.recall.filter(m => m.by === "participant").flatMap(m => m.near || [])); // 참가자가 오타로 말한 듯한 거짓 항목
+  sc.lureGroups[S.lureSet === "X" ? "Y" : "X"].forEach(w => items.push({ word: w, kind: "lure",
+    lure_type: by[w] === "self_lure" ? "self_lure" : nearSelf.has(w) ? "self_lure_near" : "unmentioned_lure" })); // self_lure·self_lure_near는 기저선(FA)에서 빠짐
   R.recog = shuffle(items); R.recogResp = [];
 }
 
-/* ---------- 출처 검사 (주의): 예고 없이, 장면당 10문항만 뽑아서 ----------
-   주의 점수에 쓰는 건 '상대가 말한 정답'뿐. 나머지(내가 말한 정답, 아무도 안 말한 실제 물건)는 전부 '상대'로 찍지 못하게 섞는 비교용
-   정답(truth): 공동 회상에서 참가자가 입력 → me / 상대가 입력 → partner / 사진에는 있었지만 아무도 입력 안 함 → none
-   같은 단어가 두 장면에 나올 수 있어(예: 숟가락) 장면 이름을 함께 보여 줌 */
+/* ---------- 출처 검사 (주의): 예고 없이, 장면당 10문항 ----------
+   구성 고정: 상대가 말한 정답 4 / 내가 말한 정답 3 / 아무도 말하지 않은 실제 물건 3
+     - '아무도' 문항은 장면에 실제로 있었지만 아무도 입력하지 않은 물건만 씀 (장면에 없던 거짓 항목은 넣지 않음)
+       → 거짓 항목은 '본 적 없음'으로 쉽게 걸러져 찍기 경향(FA)을 재지 못하고, 섞이는 비율이 사람마다 달라지면 FA가 흔들리기 때문
+     - 주의 점수 = '상대' 맞힘(상대가 말한 정답) − '상대' 오답(아무도 말하지 않은 실제 물건만 분모)
+     - 다른 장면의 물건 이름·표기와 겹치는 단어(예: 숟가락·의자·테이블), 손 채점 입력과 비슷한 단어는 누가 말했는지 애매해 뺌
+   같은 단어가 두 장면에 나올 수 있어 장면 이름을 함께 보여 줌 */
+const CROSS = {};
+for (const k of Object.keys(SCENES)) CROSS[k] = new Set(Object.keys(SCENES[k].items).filter(w => Object.keys(SCENES).some(o => o !== k && SCENES[o].alias[norm(w)])));
 function buildSource(){
   const N = CFG.SOURCE_PER_SCENE, list = [];
   S.rounds.forEach(R => {
-    const base = { round: R.idx + 1, scene: R.scene, partner: R.partner };
+    const sc = SCENES[R.scene], base = { round: R.idx + 1, scene: R.scene, partner: R.partner };
     const said = new Set(R.recall.filter(m => m.item).map(m => m.item));
+    const near = new Set(R.recall.flatMap(m => m.near || []));
+    const ok = w => !CROSS[R.scene].has(w) && !near.has(w);
     const take = (arr, n) => shuffle(arr).slice(0, n);
-    const pa = take(R.recall.filter(m => m.by === "partner" && m.type === "partner_studied"), N.partner);
-    const me = take(R.recall.filter(m => m.by === "participant" && m.type === "self_studied"), N.me);
+    const pa = take(R.recall.filter(m => m.by === "partner" && m.type === "partner_studied" && ok(m.item)), N.partner);
+    const me = take(R.recall.filter(m => m.by === "participant" && m.type === "self_studied" && ok(m.item)), N.me);
+    const inRecog = new Set(R.recog.map(x => x.word));
+    const unsaid = Object.keys(sc.items).filter(w => !said.has(w) && ok(w));
+    const none = [...take(unsaid.filter(w => inRecog.has(w)), 99), ...take(unsaid.filter(w => !inRecog.has(w)), 99)].slice(0, N.none); // 재인에 나온 물건 먼저
     pa.forEach(m => list.push({ ...base, word: m.item, truth: "partner", type: m.type }));
     me.forEach(m => list.push({ ...base, word: m.item, truth: "me", type: m.type }));
-    // '아무도' 문항: 사진에 있었지만 아무도 안 말한 물건 우선, 모자라면 아무도 안 말한 거짓 항목으로 채워 장면당 총 문항 수를 맞춤
-    const nNone = N.none + (N.partner - pa.length) + (N.me - me.length);
-    const none = [...take(R.recog.filter(x => x.kind === "studied" && !said.has(x.word)), 99),
-                  ...take(R.recog.filter(x => x.lure_type === "unmentioned_lure"), 99)].slice(0, nNone);
-    none.forEach(x => list.push({ ...base, word: x.word, truth: "none", type: x.kind === "studied" ? "studied_unmentioned" : "unmentioned_lure" }));
+    none.forEach(w => list.push({ ...base, word: w, truth: "none", type: "studied_unmentioned", in_recog: inRecog.has(w) ? 1 : 0 }));
+    R.srcShort = (N.partner - pa.length) + (N.me - me.length) + (N.none - none.length); // 0이 정상. 모자라도 다른 유형으로 채우지 않음
   });
   S.source = shuffle(list);
 }
@@ -763,8 +859,10 @@ REG.post = (el, d, done) => {
     e.preventDefault();
     const fd = new FormData(f), ans = {}; P.keys.forEach(k => ans[k] = (fd.get(k) || "").toString().trim());
     if (P.keys.some(k => !ans[k])){ el.querySelector("#warn").textContent = "모든 질문에 답해 주세요."; return; }
+    const two = v => (v.match(/[가-힣A-Za-z0-9]/g) || []).length >= 2; // "."처럼 의미 없는 답 막기 (제외 기준 판단에 씀)
+    if ("purpose_guess" in ans && !two(ans.purpose_guess)){ el.querySelector("#warn").textContent = "실험 목적에 대한 생각을 짧게라도 적어 주세요. 잘 모르겠으면 '모르겠음'이라고 적어 주세요."; return; }
+    if ("odd_notes" in ans && !two(ans.odd_notes)){ el.querySelector("#warn").textContent = "이상했던 점이 없으면 '없음'이라고 적어 주세요."; return; }
     Object.assign(S.post, ans);
-    if (d.pg === pages.length - 1) startUpload(); // 디브리핑을 읽는 동안 뒤에서 전송
     done({ phase: "post", ...ans });
   };
 };
@@ -786,10 +884,11 @@ function srcStats(src){
   const prop = (f, ans) => { const a = src.filter(f); return a.length ? a.filter(x => x.resp === ans).length / a.length : null; };
   return {
     attention: r3(prop(x => x.type === "partner_studied", "partner")),         // 주의: 상대가 말한 정답 항목을 '상대'로 맞힌 비율
-    attention_fa: r3(prop(x => x.truth !== "partner", "partner")),             // 상대가 말하지 않은 단어를 '상대'로 고른 비율 (찍기 경향)
-    attention_corrected: (() => { const h = prop(x => x.type === "partner_studied", "partner"), f = prop(x => x.truth !== "partner", "partner");
+    attention_fa: r3(prop(x => x.truth === "none", "partner")),                // 아무도 말하지 않은 실제 물건을 '상대'로 고른 비율 (찍기 경향) — 분모는 '아무도' 문항만
+    attention_corrected: (() => { const h = prop(x => x.type === "partner_studied", "partner"), f = prop(x => x.truth === "none", "partner");
                                   return h != null && f != null ? r3(h - f) : ""; })(),   // 주의 − 찍기 경향
     n_src_partner_studied: src.filter(x => x.type === "partner_studied").length,
+    n_src_none: src.filter(x => x.truth === "none").length,
     n_src_total: src.length,
     src_self_correct: r3(prop(x => x.truth === "me", "me")),
     src_none_correct: r3(prop(x => x.truth === "none", "none"))
@@ -804,11 +903,14 @@ function roundSumm(R){
     recall_unknown: cnt(m => m.type === "self_unknown"), recall_pass: cnt(m => m.type === "pass"),
     partner_lures_shown: cnt(m => m.type === "partner_lure"),
     recall_end: R.end, n_warnings: R.warnings.length, distractor_n: S.blocks[R.block].distractor.n, distractor_correct: S.blocks[R.block].distractor.correct,
+    distractor_score: S.blocks[R.block].distractor.score ?? "", distractor_hard_n: S.blocks[R.block].distractor.hard_n ?? "", distractor_hard_correct: S.blocks[R.block].distractor.hard_correct ?? "",
     ...srcStats(src),
     warnings_log: JSON.stringify(R.warnings.map(w => ({ raw: w.raw, kind: w.kind }))),
-    recall_log: JSON.stringify(logs.map(m => ({ by: m.by === "participant" ? "P" : "C", turn: m.turn, raw: m.raw, item: m.item, type: m.type, t: m.t_ms, lat: m.latency_ms }))),
+    recall_log: JSON.stringify(logs.map(m => ({ by: m.by === "participant" ? "P" : "C", turn: m.turn, raw: m.raw, item: m.item, type: m.type, t: m.t_ms, lat: m.latency_ms, fz: m.fuzzy, nr: m.near }))),
+    lure_order: (R.lureOrder || []).join("-"),
     recog_log: JSON.stringify(R.recogResp.map(x => ({ w: x.word, type: x.lure_type || ("studied_" + x.mention), yes: x.said_yes ? 1 : 0, rt: x.rt }))),
-    source_log: JSON.stringify(src.map(x => ({ w: x.word, type: x.type, truth: x.truth, resp: x.resp, rt: x.rt })))
+    src_short: R.srcShort ?? "",
+    source_log: JSON.stringify(src.map(x => ({ w: x.word, type: x.type, truth: x.truth, resp: x.resp, rt: x.rt, rg: x.in_recog })))
   };
 }
 function buildRow(){
@@ -826,7 +928,7 @@ function buildRow(){
   S.rounds.forEach(R => Object.entries(roundSumm(R)).forEach(([k, v]) => row[`r${R.idx + 1}_${k}`] = v));
   Object.assign(row, S.post);
   // 제외 기준: 불신은 자동 표시, 목적 추측(거짓 항목·기억 왜곡 언급)은 실험자가 purpose_guess를 읽고 손으로 1/0 입력
-  Object.assign(row, { excl_disbelief: (S.post.believed_human === "아니요" || S.post.believed_ai === "아니요") ? 1 : 0, excl_purpose: "" });
+  Object.assign(row, { excl_disbelief: (S.post.believed_human === "아니요" || S.post.believed_ai === "아니요") ? 1 : 0, excl_purpose: "", data_consent: 1 });
   return row;
 }
 function toCSV(rows){
@@ -856,7 +958,10 @@ async function sendOnce(){
   finally { clearTimeout(t); }
 }
 function startUpload(){
-  S.csv = toCSV([buildRow()]);
+  // 자료 사용을 거부하면 응답은 보내지 않고, 완료 확인·배정 집계에 필요한 최소 정보만 보냄 (merge.html이 자동으로 분석에서 뺌)
+  S.csv = toCSV([S.consent === 0
+    ? { participant_id: S.pid, completion_code: S.code, session_start: S.startISO, demo: S.demo ? 1 : 0, condition: S.cond, assign_source: S.assign, data_consent: 0 }
+    : buildRow()]);
   if (S.demo){ S.upload = Promise.resolve({ ok: false, why: "demo" }); return; }
   if (!CFG.DATAPIPE_ID){ S.upload = Promise.resolve({ ok: false, why: "no_datapipe" }); return; }
   S.upload = (async () => {
@@ -866,6 +971,48 @@ function startUpload(){
   })();
 }
 
+/* ---------- 사후 설명 및 연구 자료 사용 확인 (팀 문서 「실험 종료 후 사후 설명 및 연구 자료 사용 확인서」) ----------
+   자료 사용 선택: 동의를 먼저·강조해 보여 주되, 거부도 같은 크기 버튼으로 한 번에 고를 수 있게 함 (미리 선택·확인 창 없음)
+   → 거부해도 불이익이 없다는 약속을 화면이 그대로 지켜야 자발적 동의가 됨 */
+REG.debrief = (el, d, done) => {
+  setChip("안내");
+  el.innerHTML = `<h2>참여해 주셔서 감사합니다</h2>
+    <p class="muted">실험 종료 후 사후 설명 및 연구 자료 사용 확인<br>연세대학교 심리학과 「심리학의 실험연구방법」 3조 연구</p>
+    <h3>1. 실제 연구 목적</h3>
+    <p>앞서 참여하신 기억 게임은 「경쟁/협력 맥락 및 상대 유형에 따른 기억의 사회적 전염」을 살펴보기 위한 심리학 연구입니다.<br>
+    상대가 말한 물건 중 실제로 보지 않았던 물건이 이후 기억 검사에서 '보았던 것'으로 판단되는지 확인했습니다.<br>
+    그리고 이 현상이 경쟁/협력 상황과 사람/AI 상대에 따라 달라지는지 알아보고자 했습니다.</p>
+    <h3>2. 미리 말씀드리지 않은 사항</h3>
+    <ul class="rules">
+      <li><b>상대의 정체</b><br>'${esc(CFG.PARTNER_LABEL)}'와 'AI 플레이어'의 답은 모두 연구진이 미리 작성한 대본이었습니다.<br>실제 다른 참가자나 실시간 AI가 응답한 것이 아닙니다.<br>순서 정하기 결과도 미리 정해 둔 것이었습니다.</li>
+      <li><b>기억 과제</b><br>상대의 답에는 장면에 없었던 물건 이름이 일부 섞여 있었습니다.<br>잘못된 정보가 기억 판단에 미치는 영향을 알아보기 위한 것이었습니다.<br>그런 물건을 장면에서 봤다고 기억했더라도, 누구에게나 일어나는 자연스러운 기억 현상입니다.</li>
+      <li><b>마지막 질문</b><br>누가 입력했는지 묻는 질문과 기억 정확도 질문은 상대의 답에 얼마나 주의를 기울였는지, 상대를 얼마나 신뢰했는지 알아보기 위한 것이었습니다.</li>
+      <li><b>보상 규칙</b><br>협력전·경쟁전의 보상 규칙은 실험 상황을 만들기 위한 안내였습니다.<br>간식은 게임 결과와 관계없이 모든 참가자에게 똑같이 드립니다.</li>
+    </ul>
+    <h3>3. 일부 정보를 미리 알리지 않은 이유</h3>
+    <p>상대의 답이 대본이고 일부가 사실과 다르다는 것을 미리 알리면, 답을 의식적으로 의심하거나 기억 검사의 응답 방식이 바뀔 수 있습니다.<br>
+    연구 결과에 이런 영향이 생기지 않도록 일부 정보를 미리 알리지 않았습니다.<br>
+    이 과정에서 혼란이나 불편함을 느끼셨다면 양해 부탁드립니다.<br>
+    궁금한 점은 지금 실험자에게 편하게 물어봐 주세요.</p>
+    <div class="rule">아직 참여하지 않은 분들의 결과가 달라질 수 있으니, 실험 내용을 다른 사람에게 말하지 말아 주세요.</div>
+    <h3>4. 연구 자료 사용 확인</h3>
+    <p>방금 남겨 주신 응답은 AI가 사람의 기억에 얼마나 스며드는지 알아보는 데 꼭 필요한 자료입니다.<br>
+    한 분 한 분의 자료가 결과에 그대로 반영되기 때문에, 함께해 주시면 연구에 큰 힘이 됩니다.<br>
+    자료에는 이름이나 학번이 없으며, 개인을 알아볼 수 없는 형태로만 분석하고 발표합니다.</p>
+    <p class="muted">위 설명(실제 연구 목적, 대본 사용, 거짓 항목, 보상 규칙)을 읽고 궁금한 점을 물어볼 수 있었다면, 아래에서 골라 주세요.<br>
+    원하지 않으시면 자료 제외를 고르실 수 있습니다. 어느 쪽을 골라도 불이익은 없고, 간식도 똑같이 드립니다.</p>
+    <div class="btnrow">
+      <button class="btn" type="button" data-c="1">네, 제 자료를 연구에 써도 좋아요</button>
+      <button class="btn ghost" type="button" data-c="0" style="color:var(--ink)">아니요, 제 자료는 빼 주세요</button>
+    </div>
+    <p class="muted">나중에 마음이 바뀌면 다음 화면의 완료 코드를 실험자에게 알려 주세요. 분석 전이라면 자료를 빼 드립니다.</p>`;
+  el.querySelectorAll("[data-c]").forEach(b => b.onclick = () => {
+    S.consent = Number(b.dataset.c);
+    startUpload(); // 고른 뒤에 전송 (거부하면 응답 없이 최소 정보만)
+    done({ phase: "debrief", data_consent: S.consent });
+  });
+};
+
 /* ---------- 마지막 화면: 완료 코드 (실험자가 확인) ---------- */
 REG.finish = async (el, d, done) => {
   setChip("완료");
@@ -874,7 +1021,7 @@ REG.finish = async (el, d, done) => {
     if (res.ok){
       removeEventListener("beforeunload", guard);
       el.innerHTML = `<h2>모든 과정이 끝났습니다</h2>
-        <div class="status ok">답변이 안전하게 제출되었습니다.</div>
+        <div class="status ok">${S.consent === 0 ? "요청하신 대로 게임 응답은 저장하지 않았습니다." : "답변이 안전하게 제출되었습니다."}</div>
         <p>아래 완료 코드가 보이는 화면을 실험자에게 보여 주세요.</p>
         <div class="code">${esc(S.code)}</div>
         <p class="muted" style="text-align:center">확인을 받은 뒤 창을 닫으셔도 됩니다.</p>`;
@@ -930,11 +1077,19 @@ timeline.push(fn("register"));
 function blockTimeline(b){
   const B = () => S.blocks[b], tl = [], NB = 2, SPB = CFG.SCENES_PER_BLOCK;
   const sc = j => SCENES[S.rounds[B().scenes[j]].scene];
+  tl.push(fn("mode", { block: b })); // 게임 모드 (협력전/경쟁전)
   tl.push({ // 이번 라운드 상대 + 보상 규칙 (이름 없이)
     type: jsPsychHtmlButtonResponse,
     stimulus: () => `<p class="muted">라운드 ${b + 1} / ${NB}</p><h2>이번 라운드 상대</h2>
       <div class="pcard">${avatar(B(), true)}<div><b>${anonName(B())}</b><span class="muted">${isHu(B()) ? "다른 곳에서 접속" : "컴퓨터가 응답"}</span></div></div>
       <div class="rule">${ruleText()}</div>
+      ${b === 0 ? `<div class="memo"><b class="h">무엇을 외우나요?</b>
+        사진 속에 있는 물건의 이름을 외우세요.<br>
+        가구, 생활용품뿐만 아니라 벽이나 바닥에 붙어 있는 것도 물건입니다.<br>
+        다만 벽, 바닥, 천장 같은 공간 자체나 색깔, 무늬는 물건에 해당하지 않습니다.<br>
+        물건 하나는 이름 하나로 말합니다. (예: 칠판, 사물함 O / 학용품, 가구 X)<br>
+        같은 물건이 여러 개 있어도 한 번만 말합니다.<br>
+        흔히 부르는 다른 이름이나 상품 이름도 인정됩니다.</div>` : ""}
       ${SPB > 1 ? `<div class="note">장면 <b>${SPB}개</b>가 <b><u>연속으로</u></b> 제시됩니다 (각 ${T("STUDY_SEC")}초).<br>첫 장면이 끝나면 곧바로 다음 장면이 나오니, <b>두 장면의 물건을 모두</b> 외워 주세요.</div>` : ""}
       <p class="muted">게임은 장면 학습${SPB > 1 ? "" : `(${T("STUDY_SEC")}초)`}, 계산 문제, 공동 회상 순서로 진행됩니다.</p>`,
     choices: ["다음"], data: { phase: "round_intro", block: b + 1 },
@@ -1006,17 +1161,7 @@ timeline.push(fn("source")); // 주의: 출처 검사 (재인 뒤, 예고 없이
 timeline.push(fn("trust", { pi: 0 }), fn("trust", { pi: 1 }));  // 신뢰: 기억 정확도 평정 (재인 뒤 — 앞에 두면 상대 답을 따져 보게 해 전염이 줄 수 있음)
 timeline.push(fn("post", { pg: 0 }), fn("post", { pg: 1 }));
 
-timeline.push({ // 디브리핑 (그동안 뒤에서 전송)
-  type: jsPsychHtmlButtonResponse,
-  stimulus: () => `<h2>참여해 주셔서 감사합니다</h2>
-    <p>이 연구는 다른 사람이나 AI가 말한 내용이 내 기억에 섞여 들어오는지를 알아보는 ‘사회적 기억 전염’에 대한 연구입니다.</p>
-    <p>실제로는 다른 참가자와 연결되지 않았습니다.<br>사람 라운드의 상대도 AI 라운드와 마찬가지로 프로그램이었고, 상대의 답과 순서 정하기 결과는 모두 미리 정해 둔 것이었습니다.<br>상대의 답 중 일부에는 장면에 없던 물건이 섞여 있었습니다.<br>그런 물건을 장면에서 봤다고 기억했더라도, 누구에게나 일어나는 자연스러운 기억 현상임을 알려드립니다.</p>
-    <p>마지막 질문들은 상대의 답에 얼마나 주의를 기울였는지, 또 상대를 얼마나 신뢰했는지를 알아보기 위한 것이었습니다.<br>보상 규칙은 협력과 경쟁 상황을 연출하기 위한 조건이었으며, 간식은 게임 결과와 관계없이 모든 참가자에게 드립니다.</p>
-    <div class="rule">아직 참여하지 않은 분들의 결과가 달라질 수 있으니 실험 내용을 다른 사람에게 말하지 말아 주세요.</div>
-    <p>다시 한 번 연구에 참여해 주셔서 감사드립니다.</p>`,
-  choices: ["확인했습니다"], data: { phase: "debrief" },
-  on_load: () => setChip("안내")
-});
+timeline.push(fn("debrief")); // 사후 설명 + 자료 사용 확인 → 고른 뒤 전송
 timeline.push(fn("finish"));
 
 jsPsych.run(timeline);
