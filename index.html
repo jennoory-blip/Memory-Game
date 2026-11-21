@@ -88,6 +88,9 @@ ul.rules{margin:0 0 12px;padding-left:20px;display:grid;gap:4px}
 /* 장면 사진: 잘리지 않게 전체를 보여 줌 */
 .scene{display:block;width:100%;height:auto;max-height:calc(100vh - 90px);object-fit:contain;margin:0 auto;border-radius:6px}
 .timer{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:16px;color:var(--muted)}
+.study-timer{font-size:22px;font-weight:700;color:var(--ink)}   /* 장면 학습·계산 문제·공동 회상의 남은 시간 표시를 같은 크기로 */
+.study-bar{height:8px;border-radius:4px;background:var(--line);margin:4px 0 8px;overflow:hidden}
+.study-bar>div{height:100%;width:100%;background:var(--accent);transition:width 1s linear}
 /* 공동 회상 */
 .recall-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .log{display:flex;flex-direction:column;gap:8px;height:clamp(150px,calc(100vh - 470px),400px);overflow-y:auto;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
@@ -237,13 +240,15 @@ const SCENE_DEF = {
       "숟가락":["숫가락","수저","스푼","숟갈","티스푼"], "프라이팬":["후라이팬","프라이펜","후라이펜","팬","펜","프라이판"],
       "믹서기":["믹서","블렌더","블랜더","미니믹서","핸드블렌더"], "접시":["그릇","앞접시","식기","식기건조대","건조대","접시꽂이"], "가위":["주방가위"], "국자":[],
       "뒤집개":["뒤집게","스패츌라","스패출라","스파츌라","스패튤라","터너"], "주걱":["밥주걱"],
-      "전기밥솥":["밥솥","압력밥솥","쿠쿠","밥통"], "에어프라이어":["에어프라이기","에어프라이","오븐","토스터","토스터기","오븐토스터","미니오븐","전기오븐"],
+      "전기밥솥":["밥솥","압력밥솥","쿠쿠","밥통"], "에어프라이어":["에어프라이어기","에어프라이기","에어프라이","오븐","토스터","토스터기","오븐토스터","미니오븐","전기오븐"],
       "집게":["요리집게","고기집게","주방집게","텅스","통스","짚게","짚개","집개"], "거품기":["휘핑기","휘퍼","휘스크","계란거품기"],
       "고무장갑":["장갑","위생장갑"], "물병":["물통","보온병","텀블러","주전자","보온주전자","포트","피처","물주전자","유리병"], "소금":["소금통","맛소금"],
       "주방세제":["세제","퐁퐁","식기세제","세제통"], "식탁":["테이블","탁자","스툴","협탁","밥상"],
       "싱크대":["싱크","개수대","수도꼭지","수전","설거지통"], "행주":["스펀지","걸레","행주천"], "정수기":["냉온수기","커피머신","커피메이커"],
-      "인덕션":["가스레인지","가스렌지","전기레인지","전기렌지","하이라이트","가스버너","화구"]  // 목록 밖이지만 사진에 있음 → 정답 인정만
+      "인덕션":["가스레인지","가스렌지","전기레인지","전기렌지","하이라이트","가스버너","화구"],  // 목록 밖이지만 사진에 있음 → 정답 인정만
+      "조명":["간접조명","전등","주방조명","led","무드등"]  // 11/21 파일럿: 사진에 있음 → 정답 인정만
     },
+    acceptOnly: ["인덕션","조명"],   // 정답으로만 인정: 상대 대본·출처 검사에 쓰지 않음
     easy: ["프라이팬","에어프라이어","전기밥솥","싱크대","고무장갑"],
     hard: ["집게","거품기","주걱","행주","물병","식탁"],
     recogStudied: ["숟가락","국자","가위","소금","접시","정수기"],          // 나머지: 뒤집개·주방세제·믹서기
@@ -259,9 +264,9 @@ const SCENE_DEF = {
       "시계":["벽시계","탁상시계","원형시계"], "안마의자":["마사지의자","마사지체어","안마기"], "책":["책들","서적","도서"],
       "수납장":["tv장","티비장","tv다이","티비다이","거실장","서랍장","선반","서랍","거치대"],
       "테이블":["책상","탁자","티테이블","좌탁","식탁","협탁","거실테이블","커피테이블"],
-      "액자":["가족사진","사진","사진액자","사진틀"], "라디오":["전축","레트로라디오"], "요가매트":["매트","운동매트"],
+      "액자":["가족사진","사진","사진액자","사진틀"], "라디오":["전축","레트로라디오"], "요가매트":["매트","운동매트","폼롤러"],
       "블라인드":["커튼","롤스크린","버티칼"], "스피커":["오디오"], "흔들의자":["의자","안락의자","나무의자"],
-      "인형":["곰인형","테디베어","곰","곰돌이","봉제인형","곰돌이인형"], "장식장":["진열장","찬장","그릇장","유리장","책장","캐비닛","캐비넷","쇼케이스","유리진열장","유리장식장"],
+      "인형":["곰인형","테디베어","곰","곰돌이","봉제인형","곰돌이인형"], "장식장":["진열장","찬장","그릇장","유리장","책장","캐비닛","캐비넷","쇼케이스","유리진열장","유리장식장","유리관물대"],
       "창문":["창","창틀","유리창"], "청소기":["진공청소기","무선청소기"]
     },
     easy: ["TV","소파","인형","안마의자","청소기"],
@@ -274,7 +279,7 @@ const SCENE_DEF = {
   },
   B: { name: "화장실", image: "img/bathroom.jpg",
     items: {
-      "샴푸":["샴푸통"], "수건":["타월","타올"], "치약":[], "칫솔":[], "변기":["양변기","좌변기"],
+      "샴푸":["샴푸통"], "수건":["타월","타올","수건걸이"], "치약":[], "칫솔":[], "변기":["양변기","좌변기"],
       "린스":["린스통","컨디셔너","트리트먼트"], "물티슈":["티슈","물휴지"], "양치컵":["컵","물컵","플라스틱컵"],
       "가글":["가글액","구강청결제","가그린","리스테린"], "때밀이":["때타올","떼타올","때수건","이태리타올"],
       "락스":["표백제","욕실세제","블리치","분무기","스프레이","청소세제","세제"], "로션":["바디로션","크림","미스트","스킨"], "생리대":["패드","위생용품","여성용품","여성위생용품"],
@@ -298,13 +303,15 @@ const SCENE_DEF = {
       "아이스크림":["메로나","아이스바","하드","빙과","콘","콘아이스크림","월드콘","브라보콘"], "얼음컵":["얼음","아이스컵","컵","플라스틱컵","컵얼음"],
       "담배":["담뱃갑","담배갑"], "쓰레기통":["휴지통","분리수거함","재활용통","분리수거통"], "의자":["플라스틱의자","간이의자","스툴","목욕의자","플라스틱스툴"],
       "우산꽂이":["우산통","우산함","우산거치대","우산꽂이통"], "CCTV":["씨씨티비","감시카메라","카메라","보안카메라"],
-      "젤리":["구미","구미베어","하리보","하리보젤리"], "건전지":["배터리","밧데리"], "껌":["자일리톨"], "사탕":["막대사탕","츄파춥스","롤리팝","캔디"],
-      "우산":["접이식우산","장우산","양산"], "양말":[]
-      // 11/19 새 사진에서 숟가락이 빠져 숟가락 행 삭제
+      "젤리":["구미","구미베어","하리보","하리보젤리"], "건전지":["배터리","밧데리"], "사탕":["막대사탕","츄파춥스","롤리팝","캔디"],
+      "우산":["접이식우산","장우산","양산"], "양말":[],
+      // 11/19 새 사진에서 숟가락이 빠져 숟가락 행 삭제 / 11/21 껌은 사진에서 알아보기 어려워 삭제
+      "계산대":["카운터","매대","계산하는곳"], "자동문":["문","출입문","유리문","입구"]  // 11/21 파일럿: 사진에 있음 → 정답 인정만
     },
+    acceptOnly: ["계산대","자동문"],   // 정답으로만 인정: 상대 대본·출처 검사에 쓰지 않음
     easy: ["삼각김밥","얼음컵","바나나우유","맥주","소주"],
-    hard: ["우산","건전지","양말","CCTV","핫바","껌"],
-    recogStudied: ["도시락","아이스크림","젤리","샌드위치","담배","의자"],    // 나머지: 사탕·쓰레기통·우산꽂이
+    hard: ["우산","건전지","양말","CCTV","핫바","쓰레기통"],   // 11/21 껌 → 쓰레기통
+    recogStudied: ["도시락","아이스크림","젤리","샌드위치","담배","의자"],    // 나머지: 사탕·우산꽂이
     lureGroups: { X: ["포스기","라이터","빨대"], Y: ["감자칩","컵라면","전자레인지"] },
     backupLure: ["마스크"],
     lureAlias: { "포스기":["포스","카드단말기","결제단말기"], "라이터":["가스라이터","일회용라이터"], "빨대":["스트로","스트로우"],
@@ -402,8 +409,8 @@ const ICON_ATTR = `viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
 const HANDSHAKE = cls => `<svg class="${cls}" ${ICON_ATTR}><path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4"/><path d="m21 3 1 11h-2"/><path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3"/><path d="M3 4h8"/></svg>`;
 const SWORDS = cls => `<svg class="${cls}" ${ICON_ATTR}><path d="m13 19 6-6"/><path d="M14.5 17.5 3.586 6.586A2 2 0 013 5.172V3h2.172a2 2 0 011.414.586L17.5 14.5"/><path d="m14.828 6.172 2.586-2.586A2 2 0 0118.828 3H21v2.172a2 2 0 01-.586 1.414l-2.586 2.586"/><path d="m16 16 4 4"/><path d="m19 21 2-2"/><path d="m5 14 4 4"/><path d="m5 21-2-2"/><path d="M7.5 16.5 4 20"/></svg>`;
 const MODE = {
-  cooperate: { name: "협력전", icon: HANDSHAKE, rule: `상대와 함께 <b><u>평균 이상의 물건</u></b>을 맞히면 보상을 받습니다.` },
-  compete:   { name: "경쟁전", icon: SWORDS,    rule: `상대보다 <b><u>더 많은 물건</u></b>을 맞히면 보상을 받습니다.` }
+  cooperate: { name: "협력전", icon: HANDSHAKE, rule: `상대와 힘을 합쳐 최대한 많은 물건을 맞히세요.<br>두 사람이 맞힌 개수의 합이 <b><u>평균 이상</u></b>이면 함께 보상을 받습니다.` },
+  compete:   { name: "경쟁전", icon: SWORDS,    rule: `상대보다 더 많은 물건을 맞히세요.<br><b><u>더 많이 맞힌 쪽</u></b>만 보상을 받습니다.` }
 };
 const ruleText = () => { const m = MODE[S.context]; return `<b class="rtitle">${m.icon("ricon")}${m.name}</b>${m.rule}`; };
 
@@ -505,9 +512,11 @@ REG.study = (el, d, done) => {
   document.body.classList.add("wide");
   const end = () => { if (fin) return; fin = true; clearInterval(id); document.body.classList.remove("wide"); done({ phase: "study", round: d.round + 1, scene: R.scene }); };
   el.innerHTML = `
-    <div class="recall-head"><b>${SPB > 1 ? `장면 ${R.pos + 1} / ${SPB} · ` : ""}장면에 있는 물건을 최대한 많이 외우세요</b><span>${S.demo ? '<button class="btn ghost" id="skip" type="button" style="margin:0 12px 0 0;padding:2px 10px">(데모) 건너뛰기</button>' : ""}<span class="timer" id="st">${s}초</span></span></div>
+    <div class="recall-head"><b>${SPB > 1 ? `장면 ${R.pos + 1} / ${SPB} · ` : ""}장면에 있는 물건을 최대한 많이 외우세요</b><span>${S.demo ? '<button class="btn ghost" id="skip" type="button" style="margin:0 12px 0 0;padding:2px 10px">(데모) 건너뛰기</button>' : ""}<span class="timer study-timer" id="st">남은 시간 ${s}초</span></span></div>
+    <div class="study-bar" aria-hidden="true"><div id="sbar"></div></div>
     <img class="scene" src="${esc(sc.image)}" alt="${esc(sc.name)} 장면">`;
-  id = setInterval(() => { s--; const e = el.querySelector("#st"); if (e) e.textContent = s + "초"; if (s <= 0) end(); }, 1000);
+  const total = s;
+  id = setInterval(() => { s--; const e = el.querySelector("#st"); if (e) e.textContent = `남은 시간 ${Math.max(s, 0)}초`; const b = el.querySelector("#sbar"); if (b) b.style.width = (Math.max(s, 0) / total * 100) + "%"; if (s <= 0) end(); }, 1000);
   if (S.demo) el.querySelector("#skip").onclick = end;
 };
 
@@ -528,7 +537,7 @@ REG.distract = (el, d, done) => {
     a = rand(3, 9); b = rand(11, 19); return { q: `${a} × ${b}`, ans: a * b, pts: 1 };
   };
   el.innerHTML = `
-    <div class="recall-head"><h2 style="margin:0">계산 문제</h2><span><span class="timer" id="sc" style="margin-right:16px">점수 0점</span><span class="timer" id="dt">남은 시간 ${s}초</span></span></div>
+    <div class="recall-head"><h2 style="margin:0">계산 문제</h2><span><span class="timer" id="sc" style="margin-right:16px">점수 0점</span><span class="timer study-timer" id="dt">남은 시간 ${s}초</span></span></div>
     <p class="muted">시간이 끝날 때까지 계산 문제를 최대한 많이 풀어 주세요.<br>문제마다 배점이 다르며, 맞힌 문제의 배점만큼 점수가 쌓입니다. 계산 점수는 개인 기록으로 남습니다.</p>
     <div class="word" id="q"></div>
     <p class="pts" id="pt"></p>
@@ -610,7 +619,7 @@ REG.recall = (el, d, done) => {
   const t0 = performance.now(), log = [], said = new Set();
   let pTurns = 0, aTurns = 0, ended = false, left = T("RECALL_SEC"), timer = null;
   el.innerHTML = `
-    <div class="recall-head"><h2 style="margin:0">공동 회상 · ${esc(sc.name)} 장면${CFG.SCENES_PER_BLOCK > 1 ? ` (${R.pos + 1}/${CFG.SCENES_PER_BLOCK})` : ""}</h2><span class="timer" id="rt">남은 시간 ${left}초</span></div>
+    <div class="recall-head"><h2 style="margin:0">공동 회상 · ${esc(sc.name)} 장면${CFG.SCENES_PER_BLOCK > 1 ? ` (${R.pos + 1}/${CFG.SCENES_PER_BLOCK})` : ""}</h2><span class="timer study-timer" id="rt">남은 시간 ${left}초</span></div>
     <div class="rule small">${ruleText()}</div>
     <p class="muted">번갈아 하나씩, <b>띄어쓰기 없이 붙여서</b> 입력하세요.<br>떠오르지 않으면 '패스'를 누르세요(패스도 한 차례로 계산됩니다).</p>
     <div class="log" id="log" aria-live="polite"></div>
@@ -693,7 +702,7 @@ REG.recall = (el, d, done) => {
       if (w) return { item: w, type: "partner_lure" };
     }
     const order = CFG.EASY_TURNS.includes(t) ? [...sc.easy, ...sc.hard] : [...sc.hard, ...sc.easy];
-    const rest = Object.keys(sc.items).filter(w => !sc.recogStudied.includes(w));
+    const rest = Object.keys(sc.items).filter(w => !sc.recogStudied.includes(w) && !(sc.acceptOnly || []).includes(w));
     return { item: first(order) || first(rest) || first(Object.keys(sc.items)) || Object.keys(sc.items).find(w => !said.has(w)), type: "partner_studied" };
   };
   const partnerTurn = () => {
@@ -763,10 +772,10 @@ function buildSource(){
     const pa = take(R.recall.filter(m => m.by === "partner" && m.type === "partner_studied" && ok(m.item)), N.partner);
     const me = take(R.recall.filter(m => m.by === "participant" && m.type === "self_studied" && ok(m.item)), N.me);
     const inRecog = new Set(R.recog.map(x => x.word));
-    const unsaid = Object.keys(sc.items).filter(w => !said.has(w) && ok(w));
+    const unsaid = Object.keys(sc.items).filter(w => !said.has(w) && ok(w) && !(sc.acceptOnly || []).includes(w));
     const none = [...take(unsaid.filter(w => inRecog.has(w)), 99), ...take(unsaid.filter(w => !inRecog.has(w)), 99)].slice(0, N.none); // 재인에 나온 물건 먼저
-    pa.forEach(m => list.push({ ...base, word: m.item, truth: "partner", type: m.type }));
-    me.forEach(m => list.push({ ...base, word: m.item, truth: "me", type: m.type }));
+    pa.forEach(m => list.push({ ...base, word: m.raw || m.item, item: m.item, truth: "partner", type: m.type }));
+    me.forEach(m => list.push({ ...base, word: (m.raw || m.item).trim(), item: m.item, truth: "me", type: m.type }));   // 11/21: 내가 말한 물건은 내가 입력한 표현 그대로 보여 줌
     none.forEach(w => list.push({ ...base, word: w, truth: "none", type: "studied_unmentioned", in_recog: inRecog.has(w) ? 1 : 0 }));
     R.srcShort = (N.partner - pa.length) + (N.me - me.length) + (N.none - none.length); // 0이 정상. 모자라도 다른 유형으로 채우지 않음
   });
@@ -911,7 +920,7 @@ function roundSumm(R){
     lure_order: (R.lureOrder || []).join("-"),
     recog_log: JSON.stringify(R.recogResp.map(x => ({ w: x.word, type: x.lure_type || ("studied_" + x.mention), yes: x.said_yes ? 1 : 0, rt: x.rt }))),
     src_short: R.srcShort ?? "",
-    source_log: JSON.stringify(src.map(x => ({ w: x.word, type: x.type, truth: x.truth, resp: x.resp, rt: x.rt, rg: x.in_recog })))
+    source_log: JSON.stringify(src.map(x => ({ w: x.word, item: x.item || x.word, type: x.type, truth: x.truth, resp: x.resp, rt: x.rt, rg: x.in_recog })))
   };
 }
 function buildRow(){
