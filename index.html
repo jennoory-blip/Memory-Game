@@ -211,6 +211,7 @@ const CFG = {
 const N_CONDITIONS = 32; // DataPipe '조건 수'에 이 숫자를 넣을 것
 const COLLEGES = ["문과대학","상경대학","경영대학","이과대학","공과대학","생명시스템대학","인공지능융합대학","신과대학","사회과학대학",
   "음악대학","생활과학대학","교육과학대학","언더우드국제대학","글로벌인재대학","간호대학","의과대학","치과대학","약학대학","기타"];
+const HUMAN_NAME_EXCLUDE = ["기타", "의과대학", "치과대학", "약학대학", "인공지능융합대학"]; // 사람 상대 이름(무작위)에 쓰지 않는 단과대학. 참가자 등록 목록에는 영향 없음
 
 /* 주소 뒤에 붙이는 옵션 (실험자용)
    ?demo=1   데모: 시간 단축·건너뛰기 버튼·전송 안 함·배정 카운터를 쓰지 않음
@@ -449,7 +450,9 @@ function makeId(){
 }
 function makeHumanName(){
   if (CFG.HUMAN_NAME) return CFG.HUMAN_NAME;
-  const col = pick(COLLEGES.filter(c => c !== "기타"));
+  // 사람 상대 이름에서 뺄 단과대학: '기타' + 기억 정확성·AI 관련 인상을 강하게 주는 단과대학(의과·치과·약학·인공지능융합) (11/25)
+  //   — 참가자 등록 목록(COLLEGES)에는 그대로 남음
+  const col = pick(COLLEGES.filter(c => !HUMAN_NAME_EXCLUDE.includes(c)));
   const sur = pick(["kim","lee","park","choi","jung","kang","cho","yoon","jang","lim","han","shin","seo","kwon","hwang","song"]);
   const ini = () => pick([..."bdhjkmnsyw"]);
   return `${col} ${ini()}${ini()}${sur}${String(rand(0, 99)).padStart(2, "0")}`;
